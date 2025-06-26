@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     TEMP_UPLOAD_DIR: str = "./temp/uploads"
     MAX_UPLOAD_SIZE: int = 52428800  # 50MB
     
+    # PDF Processing
+    PDF_BATCH_SIZE: int = 10  # 배치당 청크 수
+    PDF_CHUNK_SIZE: int = 1000
+    PDF_CHUNK_OVERLAP: int = 200
+    
     # Logging
     LOG_LEVEL: str = "DEBUG"
     
