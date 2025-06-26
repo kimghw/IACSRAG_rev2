@@ -1,6 +1,6 @@
 # content_pdf/repository.py
 from typing import List
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 
 from infra.databases.qdrant_db import QdrantDB
@@ -30,7 +30,7 @@ class PdfRepository:
                     "text": embedding.embedding_text,
                     "metadata": embedding.metadata,
                     "content_type": "pdf",
-                    "created_at": datetime.utcnow().isoformat()
+                    "created_at": datetime.now(timezone.utc).isoformat()
                 }
             }
             points.append(point)
@@ -47,7 +47,7 @@ class PdfRepository:
         """처리 상태 업데이트"""
         update_data = {
             "status": status,
-            "updated_at": datetime.utcnow()
+            "updated_at": datetime.now(timezone.utc)
         }
         
         if error_message:

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from typing import Dict, Any, Optional
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from upload_service.orchestrator import UploadOrchestrator
 from schema import UploadRequest, UploadResponse
@@ -30,7 +30,7 @@ async def upload_pdf(
             content_type="application/pdf",
             file_size=file.size,
             metadata=metadata or {},
-            uploaded_at=datetime.utcnow()
+            uploaded_at=datetime.now(timezone.utc)
         )
         
         # 파일 내용 읽기

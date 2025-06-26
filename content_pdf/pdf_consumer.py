@@ -15,19 +15,17 @@ class PdfConsumer(EventConsumer):
         )
         self.orchestrator = PdfOrchestrator()
     
-    async def handle_message(self, message: Dict[str, Any]):
-        """document.uploaded 이벤트 처리"""
+    # content_pdf/pdf_consumer.py
+async def handle_message(self, message: Dict[str, Any]):
+    if message.get("content_type") != "application/pdf":
+        return
+    
+    # file_path 대신 document_id 사용
+    request = PdfProcessingRequest(
+        document_id=message["document_id"],
+        # file_path=message["file_path"],  # 제거
+        metadata=message.get("metadata", {})
+    )
         
-        # PDF 타입만 처리
-        if message.get("content_type") != "application/pdf":
-            return
-        
-        # PDF 처리 요청 생성
-        request = PdfProcessingRequest(
-            document_id=message["document_id"],
-            file_path=message["file_path"],
-            metadata=message.get("metadata", {})
-        )
-        
-        # Orchestrator를 통해 처리
-        await self.orchestrator.process_pdf(request)
+    # Orchestrator를 통해 처리
+    await self.orchestrator.process_pdf(request)

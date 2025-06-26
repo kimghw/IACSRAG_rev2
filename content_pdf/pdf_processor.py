@@ -2,26 +2,24 @@ import PyPDF2
 import pdfplumber
 from typing import Optional
 
+# content_pdf/pdf_processor.py
 class PdfProcessor:
-    """PDF 텍스트 추출 서비스"""
+    def __init__(self):
+        self.mongo = MongoDB()
     
-    async def extract_text(self, file_path: str) -> str:
-        """PDF에서 텍스트 추출"""
-        text = ""
+    async def extract_text(self, document_id: str) -> str:
+        """MongoDB에서 파일 읽어서 텍스트 추출"""
+        # GridFS에서 파일 가져오기
+        doc = await self.mongo.find_one("uploads", {"document_id": document_id})
         
-        # pdfplumber로 먼저 시도 (표 처리 우수)
-        try:
-            with pdfplumber.open(file_path) as pdf:
-                for page in pdf.pages:
-                    page_text = page.extract_text()
-                    if page_text:
-                        text += page_text + "\n"
-        except:
-            # 실패 시 PyPDF2로 재시도
-            with open(file_path, 'rb') as file:
-                pdf_reader = PyPDF2.PdfReader(file)
-                for page_num in range(len(pdf_reader.pages)):
-                    page = pdf_reader.pages[page_num]
-                    text += page.extract_text() + "\n"
+        fs = AsyncIOMotorGridFSBucket(self.mongo.db)
+        file_content = await fs.download_to_stream(doc["gridfs_file_id"])
+        
+        # 메모리에서 직접 PDF 처리
+        import io
+        with pdfplumber.open(io.BytesIO(file_content)) as pdf:
+            text = ""
+            for page in pdf.pages:
+                text += page.extract_text() + "\n"
         
         return text.strip()
