@@ -1,10 +1,4 @@
-from typing import List, Dict, Any
-from datetime import datetime
-
-from infra.databases.qdrant_db import QdrantDB
-from infra.databases.mongo_db import MongoDB
-from schema import EmbeddingData
-
+# content_pdf/repository.py
 class PdfRepository:
     """PDF 모듈 데이터 접근 계층"""
     
@@ -24,7 +18,9 @@ class PdfRepository:
                     "content_id": embedding.content_id,
                     "chunk_id": embedding.chunk_id,
                     "text": embedding.embedding_text,
-                    "metadata": embedding.metadata
+                    "metadata": embedding.metadata,
+                    "content_type": "pdf",  # 타입 정보 추가
+                    "created_at": datetime.utcnow().isoformat()
                 }
             }
             points.append(point)
@@ -37,7 +33,7 @@ class PdfRepository:
         status: str, 
         error_message: str = None
     ):
-        """처리 상태 업데이트"""
+        """처리 상태 업데이트 - MongoDB 기본 CRUD 활용"""
         update_data = {
             "status": status,
             "updated_at": datetime.utcnow()
@@ -46,7 +42,8 @@ class PdfRepository:
         if error_message:
             update_data["error_message"] = error_message
         
-        await self.mongo.update_document(
+        # MongoDB의 기본 CRUD 사용
+        await self.mongo.update_one(
             collection="uploads",
             filter={"document_id": document_id},
             update={"$set": update_data}
