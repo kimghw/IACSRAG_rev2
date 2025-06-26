@@ -1,11 +1,12 @@
 # content_pdf/repository.py
-from typing import List
+from typing import List, Dict, Any
 from datetime import datetime, timezone
 import logging
+import asyncio
 
 from infra.databases.qdrant_db import QdrantDB
 from infra.databases.mongo_db import MongoDB
-from schema import EmbeddingData
+from schema import EmbeddingData, ChunkDocument
 
 logger = logging.getLogger(__name__)
 
@@ -16,8 +17,46 @@ class PdfRepository:
         self.qdrant = QdrantDB()
         self.mongo = MongoDB()
     
-    async def save_to_qdrant(self, embeddings: List[EmbeddingData]):
-        """Qdrant에 임베딩 저장"""
+    async def save_chunks_to_mongo(self, chunks: List[ChunkDocument]):
+        """청크를 MongoDB에 비동기로 저장"""
+        documents = []
+        for chunk in chunks:
+            doc = {
+                "document_id": chunk.document_id,
+                "chunk_id": chunk.chunk_id,
+                "chunk_data": chunk.chunk_data,
+                "chunk_index": chunk.chunk_index,
+                "created_at": chunk.created_at,
+                "indexed_at": chunk.indexed_at,
+                "index_info": chunk.index_info
+            }
+            documents.append(doc)
+        
+        # 비동기 벌크 삽입
+        if documents:
+            result = await self.mongo.db["chunk_documents"].insert_many(documents)
+            logger.info(f"Saved {len(result.inserted_ids)} chunks to MongoDB")
+    
+    async def update_chunk_index_info(self, chunk_id: str, index_info: Dict[str, Any]):
+        """청크의 인덱싱 정보만 업데이트"""
+        result = await self.mongo.update_one(
+            collection="chunk_documents",
+            filter={"chunk_id": chunk_id},
+            update={
+                "$set": {
+                    "indexed_at": datetime.now(timezone.utc),
+                    "index_info": index_info
+                }
+            }
+        )
+        
+        if result:
+            logger.debug(f"Updated index info for chunk: {chunk_id}")
+        else:
+            logger.warning(f"Failed to update index info for chunk: {chunk_id}")
+    
+    async def save_embeddings_to_qdrant(self, embeddings: List[EmbeddingData]):
+        """Qdrant에 임베딩 저장 (MongoDB 참조 정보 포함)"""
         points = []
         
         for embedding in embeddings:
@@ -25,9 +64,13 @@ class PdfRepository:
                 "id": embedding.embedding_id,
                 "vector": embedding.embedding_vector,
                 "payload": {
-                    "content_id": embedding.content_id,
+                    # MongoDB 참조 정보
+                    "document_id": embedding.content_id,
                     "chunk_id": embedding.chunk_id,
-                    "text": embedding.embedding_text,
+                    "mongo_collection": "chunk_documents",
+                    
+                    # 텍스트 및 메타데이터
+                    "text": embedding.embedding_text[:500],  # 검색용 텍스트 일부
                     "metadata": embedding.metadata,
                     "content_type": "pdf",
                     "created_at": datetime.now(timezone.utc).isoformat()
@@ -42,7 +85,8 @@ class PdfRepository:
         self, 
         document_id: str, 
         status: str, 
-        error_message: str = None
+        error_message: str = None,
+        processed_info: Dict[str, Any] = None
     ):
         """처리 상태 업데이트"""
         update_data = {
@@ -52,6 +96,9 @@ class PdfRepository:
         
         if error_message:
             update_data["error_message"] = error_message
+        
+        if processed_info:
+            update_data["processed_info"] = processed_info
         
         result = await self.mongo.update_one(
             collection="uploads",

@@ -1,11 +1,12 @@
 # content_pdf/pdf_embedder.py
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 import httpx
 import uuid
 from tenacity import retry, stop_after_attempt, wait_exponential
 import logging
+from datetime import datetime, timezone
 
-from schema import ChunkData, EmbeddingData
+from schema import ChunkDocument, EmbeddingData
 from infra.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -17,12 +18,11 @@ class PdfEmbedder:
         self.api_key = settings.OPENROUTER_API_KEY
         self.base_url = settings.OPENROUTER_BASE_URL
         self.model = settings.OPENROUTER_EMBEDDING_MODEL
-        self.batch_size = 20
         self.headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "http://localhost:8000",  # OpenRouter 필수
-            "X-Title": "IACSRAG System"  # OpenRouter 권장
+            "HTTP-Referer": "http://localhost:8000",
+            "X-Title": "IACSRAG System"
         }
     
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
@@ -46,31 +46,52 @@ class PdfEmbedder:
             data = response.json()
             return [item['embedding'] for item in data['data']]
     
-    async def generate_embeddings(self, chunks: List[ChunkData]) -> List[EmbeddingData]:
-        """청크 리스트에서 임베딩 생성"""
-        embeddings = []
+    async def generate_batch_embeddings(
+        self, 
+        chunk_batch: List[ChunkDocument]
+    ) -> Tuple[List[EmbeddingData], Dict[str, Dict[str, Any]]]:
+        """
+        배치 단위로 임베딩 생성
+        Returns: (embeddings, index_info_map)
+        """
+        # 텍스트 추출
+        texts = [chunk.chunk_data["text"] for chunk in chunk_batch]
         
-        # 배치 처리
-        for i in range(0, len(chunks), self.batch_size):
-            batch = chunks[i:i + self.batch_size]
-            texts = [chunk.chunk_text for chunk in batch]
+        logger.info(f"Generating embeddings for batch of {len(texts)} chunks")
+        
+        # 임베딩 생성
+        vectors = await self._get_embeddings(texts)
+        
+        embeddings = []
+        index_info_map = {}  # chunk_id -> index_info
+        
+        for chunk, vector in zip(chunk_batch, vectors):
+            embedding_id = str(uuid.uuid4())
             
-            logger.info(f"Generating embeddings for batch {i//self.batch_size + 1}")
-            
-            # 임베딩 생성
-            vectors = await self._get_embeddings(texts)
+            # 인덱싱 정보 생성
+            index_info = {
+                "embedding_id": embedding_id,
+                "vector_size": len(vector),
+                "indexed_at": datetime.now(timezone.utc).isoformat()
+            }
             
             # EmbeddingData 생성
-            for chunk, vector in zip(batch, vectors):
-                embedding = EmbeddingData(
-                    embedding_id=str(uuid.uuid4()),
-                    content_id=chunk.content_id,
-                    chunk_id=chunk.chunk_id,
-                    embedding_vector=vector,
-                    embedding_text=chunk.chunk_text,
-                    metadata=chunk.metadata
-                )
-                embeddings.append(embedding)
+            embedding = EmbeddingData(
+                embedding_id=embedding_id,
+                content_id=chunk.document_id,
+                chunk_id=chunk.chunk_id,
+                embedding_vector=vector,
+                embedding_text=chunk.chunk_data["text"],
+                metadata={
+                    **chunk.chunk_data["metadata"],
+                    "chunk_id": chunk.chunk_id,
+                    "document_id": chunk.document_id,
+                    "chunk_index": chunk.chunk_index
+                }
+            )
+            
+            embeddings.append(embedding)
+            index_info_map[chunk.chunk_id] = index_info
         
-        logger.info(f"Generated {len(embeddings)} embeddings total")
-        return embeddings
+        logger.info(f"Generated {len(embeddings)} embeddings for batch")
+        return embeddings, index_info_map
