@@ -1,5 +1,6 @@
-# main.py
+# main.py 수정
 import asyncio
+import sys  # 추가 필요
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 import uvicorn
@@ -47,20 +48,12 @@ app = FastAPI(
 )
 
 # 라우터 등록
-app.include_router(upload_router, prefix="/api/v1")
+app.include_router(upload_router)  # prefix 제거 (router에 이미 정의됨)
 
 @app.get("/health")
 async def health_check():
     """헬스 체크 엔드포인트"""
     return {"status": "healthy", "service": "iacsrag"}
-
-if __name__ == "__main__":
-    uvicorn.run(
-        "main:app",
-        host=settings.API_HOST,
-        port=settings.API_PORT,
-        reload=True
-    )
 
 async def initialize_system():
     """시스템 초기화 명령"""
