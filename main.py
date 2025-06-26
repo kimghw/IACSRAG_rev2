@@ -6,6 +6,7 @@ import uvicorn
 import logging
 
 from infra.core.config import settings
+from infra.core.system_initializer import SystemInitializer  
 from infra.api.upload_router import router as upload_router
 from content_pdf.pdf_consumer import PdfConsumer
 
@@ -61,3 +62,23 @@ if __name__ == "__main__":
         reload=True
     )
 
+async def initialize_system():
+    """시스템 초기화 명령"""
+    initializer = SystemInitializer()
+    success = await initializer.initialize_all()
+    return success
+
+if __name__ == "__main__":
+    # 명령행 인자 확인
+    if len(sys.argv) > 1 and sys.argv[1] == "init":
+        # python main.py init 명령으로 초기화 실행
+        success = asyncio.run(initialize_system())
+        sys.exit(0 if success else 1)
+    else:
+        # 일반 서버 실행
+        uvicorn.run(
+            "main:app",
+            host=settings.API_HOST,
+            port=settings.API_PORT,
+            reload=True
+        )
