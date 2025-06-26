@@ -1,7 +1,7 @@
 # content_pdf/pdf_consumer.py
 from typing import Dict, Any
 from .orchestrator import PdfOrchestrator
-from schema import PdfProcessingRequest
+from .schema import PdfProcessingRequest
 from infra.events.event_consumer import EventConsumer
 from infra.core.config import settings
 

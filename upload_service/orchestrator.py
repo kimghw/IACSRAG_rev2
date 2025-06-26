@@ -3,7 +3,8 @@ from datetime import datetime, timezone
 from motor.motor_asyncio import AsyncIOMotorGridFSBucket
 from .repository import UploadRepository
 from .event_publisher import EventPublisher
-from schema import UploadRequest, UploadResponse, DocumentUploadedEvent, ProcessingStatus
+from .schema import UploadRequest, UploadResponse  # 모듈 내부에서
+from schema import DocumentUploadedEvent, ProcessingStatus  # 루트에서
 
 class UploadOrchestrator:
     def __init__(self):
@@ -15,7 +16,7 @@ class UploadOrchestrator:
             # 1. MongoDB에 파일과 메타데이터 저장
             await self.repository.save_upload_with_file(upload_request, file_content)
             
-            # 2. 이벤트 발행 (file_path 없이)
+            # 2. 이벤트 발행 (file_path 제거)
             event = DocumentUploadedEvent(
                 document_id=upload_request.document_id,
                 filename=upload_request.filename,

@@ -3,7 +3,7 @@ from typing import Dict, Any, Optional
 import uuid
 from datetime import datetime, timezone
 
-from upload_service.orchestrator import UploadOrchestrator
+from upload_service.schema import UploadRequest, UploadResponse  # 모듈에서 import
 from schema import UploadRequest, UploadResponse
 
 router = APIRouter(prefix="/api/v1/upload", tags=["upload"])

@@ -6,7 +6,8 @@ import asyncio
 
 from infra.databases.qdrant_db import QdrantDB
 from infra.databases.mongo_db import MongoDB
-from schema import EmbeddingData, ChunkDocument
+from .schema import ChunkDocument  # 모듈 내부에서
+from schema import EmbeddingData  # 루트에서
 
 logger = logging.getLogger(__name__)
 
