@@ -1,5 +1,7 @@
+# content_pdf/orchestrator.py
 from typing import Dict, Any, List
 import logging
+from datetime import datetime
 
 from .pdf_processor import PdfProcessor
 from .pdf_chunker import PdfChunker
@@ -59,7 +61,7 @@ class PdfOrchestrator:
                 content_id=request.document_id,
                 original_type="pdf",
                 processed_data={"chunks": len(chunks), "embeddings": len(embeddings)},
-                embeddings=embeddings,
+                embeddings=[{"id": e.embedding_id, "text": e.embedding_text[:100]} for e in embeddings],
                 metadata=request.metadata,
                 processed_at=datetime.utcnow()
             )
