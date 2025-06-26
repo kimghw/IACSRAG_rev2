@@ -18,7 +18,7 @@ class ContentType(str, Enum):
     JSON = "application/json"
     EMAIL = "email/rfc822"
 
-# === 기본 스키마 ===
+# === 모듈 간 공유 기본 스키마 ===
 class ContentEvent(BaseModel):
     """이벤트 기본 스키마"""
     event_type: str
@@ -44,16 +44,6 @@ class ChunkData(BaseModel):
     chunk_index: int
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
 
-class ChunkDocument(BaseModel):
-    """MongoDB에 저장될 청크 문서 스키마"""
-    document_id: str  # 문서번호
-    chunk_id: str     # 청크번호
-    chunk_data: Dict[str, Any]  # 청크데이터 (텍스트, 메타데이터 등)
-    chunk_index: int
-    created_at: datetime
-    indexed_at: Optional[datetime] = None
-    index_info: Optional[Dict[str, Any]] = None  # 인덱싱 정보
-
 class EmbeddingData(BaseModel):
     """임베딩 데이터 스키마"""
     embedding_id: str
@@ -63,24 +53,7 @@ class EmbeddingData(BaseModel):
     embedding_text: str
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
-# === Upload 관련 스키마 ===
-class UploadRequest(BaseModel):
-    """업로드 요청 스키마"""
-    document_id: str
-    filename: str
-    content_type: str
-    file_size: int
-    metadata: Dict[str, Any] = Field(default_factory=dict)
-    uploaded_at: datetime
-
-class UploadResponse(BaseModel):
-    """업로드 응답 스키마"""
-    document_id: str
-    status: ProcessingStatus
-    message: str
-    uploaded_at: datetime
-    metadata: Optional[Dict[str, Any]] = None
-
+# === 이벤트 스키마 (모듈 간 통신) ===
 class DocumentUploadedEvent(BaseModel):
     """document.uploaded 이벤트 스키마"""
     document_id: str
@@ -90,9 +63,3 @@ class DocumentUploadedEvent(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict)
     uploaded_at: datetime
     event_timestamp: datetime
-
-# === PDF 전용 스키마 ===
-class PdfProcessingRequest(BaseModel):
-    """PDF 처리 요청 스키마"""
-    document_id: str
-    metadata: Dict[str, Any] = Field(default_factory=dict)

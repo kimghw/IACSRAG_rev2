@@ -4,7 +4,8 @@ import uuid
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from datetime import datetime, timezone
 
-from schema import ChunkData, ChunkDocument
+from .schema import ChunkDocument  # 모듈 내부 스키마
+from schema import ChunkData  # 필요시 루트에서도 import
 from infra.core.config import settings
 
 class PdfChunker:

@@ -8,7 +8,8 @@ from .pdf_processor import PdfProcessor
 from .pdf_chunker import PdfChunker
 from .pdf_embedder import PdfEmbedder
 from .repository import PdfRepository
-from schema import PdfProcessingRequest, ProcessedContent
+from .schema import PdfProcessingRequest, ChunkDocument  # 모듈 내부 스키마
+from schema import ProcessedContent  # 루트 공유 스키마
 from infra.core.config import settings
 
 logger = logging.getLogger(__name__)
