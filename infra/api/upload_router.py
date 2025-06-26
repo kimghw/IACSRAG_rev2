@@ -3,7 +3,7 @@ from typing import Dict, Any, Optional
 import uuid
 from datetime import datetime
 
-from upload_pdf_service.orchestrator import UploadOrchestrator
+from upload_service.orchestrator import UploadOrchestrator
 from schema import UploadRequest, UploadResponse
 
 router = APIRouter(prefix="/api/v1/upload", tags=["upload"])
