@@ -14,3 +14,5 @@ PyPDF2==3.0.1
 pdfplumber==0.10.3
 langchain==0.1.0
 python-dotenv==1.0.0
+motor==3.3.2  # 이미 있음
+pymongo==4.6.0  # ObjectId 사용을 위해 추가
