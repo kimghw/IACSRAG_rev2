@@ -1,6 +1,7 @@
 # content_pdf/pdf_processor.py
 import io
 import pdfplumber
+from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorGridFSBucket
 from infra.databases.mongo_db import MongoDB
 
