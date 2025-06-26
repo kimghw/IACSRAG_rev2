@@ -6,7 +6,8 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 import logging
 from datetime import datetime, timezone
 
-from schema import ChunkDocument, EmbeddingData
+from .schema import ChunkDocument  # 모듈 내부에서
+from schema import EmbeddingData  # 루트에서
 from infra.core.config import settings
 
 logger = logging.getLogger(__name__)

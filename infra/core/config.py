@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     PDF_BATCH_SIZE: int = 10  # 배치당 청크 수
     PDF_CHUNK_SIZE: int = 1000
     PDF_CHUNK_OVERLAP: int = 200
+    PDF_MAX_CONCURRENT_PROCESSING: int = 3  # 동시 처리 PDF 개수 추가
     
     # Logging
     LOG_LEVEL: str = "DEBUG"

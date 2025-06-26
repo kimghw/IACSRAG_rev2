@@ -20,7 +20,7 @@ class EventConsumer(ABC):
         self._running = False
     
     async def start(self):
-        """컨슈머 시작"""
+        """컨슈머 시작 - 서브클래스에서 오버라이드 가능"""
         logger.info(f"Starting consumer for topics: {self.topics}, group_id: {self.group_id}")
         
         self.consumer = AIOKafkaConsumer(
@@ -45,7 +45,6 @@ class EventConsumer(ABC):
                     await self.handle_message(msg.value)
                 except Exception as e:
                     logger.error(f"Error handling message: {str(e)}")
-                    # 여기에 DLQ 로직 추가 가능
                     
         finally:
             await self.consumer.stop()
