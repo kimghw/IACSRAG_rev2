@@ -124,3 +124,5 @@ yarn-error.log*
 
 # 프로젝트별 제외 항목
 # 여기에 프로젝트 특화 제외 항목을 추가하세요
+
+./TODO_TRACKER.md

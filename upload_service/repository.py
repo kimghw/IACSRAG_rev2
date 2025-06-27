@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 from motor.motor_asyncio import AsyncIOMotorGridFSBucket
 from infra.databases.mongo_db import MongoDB
-from schema import UploadRequest
+from .schema import UploadRequest
 
 class UploadRepository:
     def __init__(self):
