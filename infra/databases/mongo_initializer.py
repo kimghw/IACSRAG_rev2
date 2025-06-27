@@ -45,6 +45,7 @@ class MongoInitializer(ServiceInitializer):
             
             # 인덱스 생성
             await db.uploads.create_index('document_id', unique=True)
+            await db.uploads.create_index('quick_hash')  # 중복 검사용 인덱스 추가
             await db.chunk_documents.create_index('chunk_id', unique=True)
             await db.chunk_documents.create_index('document_id')
             logger.info("MongoDB indexes created")

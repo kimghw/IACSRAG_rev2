@@ -1,17 +1,15 @@
-# upload_service/orchestrator.py
+# upload_service/orchestrator.py - 간소화 버전
 import time
 from datetime import datetime, timezone
-from motor.motor_asyncio import AsyncIOMotorGridFSBucket
 from .repository import UploadRepository
-from .event_publisher import EventPublisher
-from .schema import UploadRequest, UploadResponse  # 모듈 내부에서
-from schema import DocumentUploadedEvent, ProcessingStatus  # 루트에서
+from .schema import UploadRequest, UploadResponse
+from schema import ProcessingStatus
 from infra.core.processing_logger import processing_logger
 
 class UploadOrchestrator:
     def __init__(self):
-        self.publisher = EventPublisher()
         self.repository = UploadRepository()
+        # event_publisher 제거 - 필요 없음
     
     async def process_upload(self, upload_request: UploadRequest, file_content: bytes) -> UploadResponse:
         start_time = time.time()
@@ -24,21 +22,10 @@ class UploadOrchestrator:
         )
         
         try:
-            # 1. MongoDB에 파일과 메타데이터 저장
+            # MongoDB에 파일과 메타데이터 저장
             await self.repository.save_upload_with_file(upload_request, file_content)
             
-            # 2. 이벤트 발행 (file_path 제거)
-            event = DocumentUploadedEvent(
-                document_id=upload_request.document_id,
-                filename=upload_request.filename,
-                content_type=upload_request.content_type,
-                file_size=upload_request.file_size,
-                metadata=upload_request.metadata,
-                uploaded_at=upload_request.uploaded_at,
-                event_timestamp=datetime.now(timezone.utc)
-            )
-            
-            await self.publisher.publish_document_uploaded(event)
+            # 이벤트 발행 제거 - Consumer가 없으므로 불필요
             
             # 업로드 완료 로그
             duration = time.time() - start_time
