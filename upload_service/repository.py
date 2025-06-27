@@ -1,15 +1,24 @@
 # upload_service/repository.py
 from datetime import datetime, timezone
+from typing import List, Dict, Any, Optional
 from motor.motor_asyncio import AsyncIOMotorGridFSBucket
+import asyncio
 from infra.databases.mongo_db import MongoDB
 from .schema import UploadRequest
+import logging
+
+logger = logging.getLogger(__name__)
 
 class UploadRepository:
     def __init__(self):
         self.mongo = MongoDB()
     
     async def save_upload_with_file(self, upload_request: UploadRequest, file_content: bytes):
-        """파일 내용과 함께 저장 (GridFS 사용)"""
+        """
+        파일 내용과 메타데이터 저장
+        1. GridFS에 파일 저장
+        2. uploads 컬렉션에 메타데이터 저장
+        """
         # GridFS로 파일 저장
         fs = AsyncIOMotorGridFSBucket(self.mongo.db)
         file_id = await fs.upload_from_stream(
@@ -30,10 +39,12 @@ class UploadRepository:
             "file_size": upload_request.file_size,
             "metadata": upload_request.metadata,
             "status": "uploaded",
-            "uploaded_at": upload_request.uploaded_at
+            "uploaded_at": upload_request.uploaded_at,
+            "created_at": datetime.now(timezone.utc)
         }
         
         await self.mongo.insert_one("uploads", document)
+        logger.debug(f"Saved upload metadata for document: {upload_request.document_id}")
     
     async def update_upload_status(self, document_id: str, status: str, error_message: str = None):
         """업로드 상태 업데이트"""
@@ -50,3 +61,7 @@ class UploadRepository:
             filter={"document_id": document_id},
             update={"$set": update_data}
         )
+    
+    async def get_document_by_id(self, document_id: str) -> Optional[Dict[str, Any]]:
+        """document_id로 문서 조회"""
+        return await self.mongo.find_one("uploads", {"document_id": document_id})
