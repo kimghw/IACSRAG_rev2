@@ -11,12 +11,22 @@ class ProcessingStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
 
-class ContentType(str, Enum):
-    """콘텐츠 타입 enum"""
-    PDF = "application/pdf"
-    MARKDOWN = "text/markdown"
-    JSON = "application/json"
-    EMAIL = "email/rfc822"
+class DocumentEventType(str, Enum):
+    """문서 이벤트 타입 enum - 파일 타입과 content-type 통합"""
+    PDF = "pdf_type"
+    MARKDOWN = "markdown_type"
+    JSON = "json_type"
+    EMAIL = "email_type"
+    
+    def get_content_type(self) -> str:
+        """이벤트 타입에 대응하는 content-type 반환"""
+        mapping = {
+            self.PDF: "application/pdf",
+            self.MARKDOWN: "text/markdown",
+            self.JSON: "application/json",
+            self.EMAIL: "email/rfc822"
+        }
+        return mapping[self]
 
 # === 모듈 간 공유 기본 스키마 ===
 class ContentEvent(BaseModel):
@@ -55,7 +65,8 @@ class EmbeddingData(BaseModel):
 
 # === 이벤트 스키마 (모듈 간 통신) ===
 class DocumentUploadedEvent(BaseModel):
-    """document.uploaded 이벤트 스키마"""
+    """document.uploaded 이벤트 스키마 - 이벤트 타입 추가"""
+    event_type: DocumentEventType  # pdf_type, markdown_type, json_type, email_type
     document_id: str
     filename: str
     content_type: str
