@@ -13,22 +13,20 @@ from infra.core.config import settings
 logger = logging.getLogger(__name__)
 
 class PdfEmbedder:
-    """OpenRouter를 사용한 임베딩 생성 서비스"""
+    """OpenAI를 사용한 임베딩 생성 서비스"""
     
     def __init__(self):
-        self.api_key = settings.OPENROUTER_API_KEY
-        self.base_url = settings.OPENROUTER_BASE_URL
-        self.model = settings.OPENROUTER_EMBEDDING_MODEL
+        self.api_key = settings.OPENAI_API_KEY
+        self.base_url = settings.OPENAI_BASE_URL
+        self.model = settings.OPENAI_EMBEDDING_MODEL
         self.headers = {
             "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "http://localhost:8000",
-            "X-Title": "IACSRAG System"
+            "Content-Type": "application/json"
         }
     
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
     async def _get_embeddings(self, texts: List[str]) -> List[List[float]]:
-        """OpenRouter API를 통한 임베딩 생성"""
+        """OpenAI API를 통한 임베딩 생성"""
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{self.base_url}/embeddings",
@@ -41,7 +39,7 @@ class PdfEmbedder:
             )
             
             if response.status_code != 200:
-                logger.error(f"OpenRouter API error: {response.text}")
+                logger.error(f"OpenAI API error: {response.text}")
                 raise Exception(f"API error: {response.status_code}")
             
             data = response.json()

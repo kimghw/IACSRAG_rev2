@@ -28,15 +28,31 @@ class QdrantInitializer(ServiceInitializer):
             return False
     
     async def initialize(self) -> bool:
-        """Qdrant 초기화"""
+        """Qdrant 초기화 - 이미 존재하는 컬렉션은 패스"""
         try:
             client = QdrantClient(url=self.url)
             
-            # 컬렉션 확인 및 생성
-            try:
-                client.get_collection(self.collection_name)
-                logger.info(f"Collection '{self.collection_name}' already exists")
-            except:
+            # 컬렉션 목록 가져오기
+            collections = client.get_collections()
+            collection_names = [c.name for c in collections.collections]
+            
+            # 컬렉션이 이미 존재하는지 확인
+            if self.collection_name in collection_names:
+                # 이미 존재하면 정보만 출력하고 패스
+                logger.info(f"Collection '{self.collection_name}' already exists - skipping creation")
+                
+                # 기존 컬렉션 정보 출력 (선택사항)
+                try:
+                    col_info = client.get_collection(self.collection_name)
+                    logger.info(f"  - Status: {col_info.status}")
+                    logger.info(f"  - Points count: {col_info.points_count}")
+                    logger.info(f"  - Vectors count: {col_info.vectors_count}")
+                    logger.info(f"  - Vector size: {col_info.config.params.vectors.size}")
+                except Exception as e:
+                    logger.debug(f"Could not get collection info: {e}")
+            else:
+                # 컬렉션이 없으면 생성
+                logger.info(f"Creating new collection: {self.collection_name}")
                 client.create_collection(
                     collection_name=self.collection_name,
                     vectors_config=VectorParams(
@@ -44,7 +60,9 @@ class QdrantInitializer(ServiceInitializer):
                         distance=Distance.COSINE
                     )
                 )
-                logger.info(f"Created collection: {self.collection_name}")
+                logger.info(f"✅ Created collection: {self.collection_name}")
+                logger.info(f"  - Vector size: {self.vector_size}")
+                logger.info(f"  - Distance metric: COSINE")
             
             return True
             

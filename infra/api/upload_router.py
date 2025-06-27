@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 
 from upload_service.orchestrator import UploadOrchestrator
 from upload_service.schema import UploadRequest, UploadResponse
+from content_pdf.orchestrator import PdfOrchestrator
+from content_pdf.schema import PdfProcessingRequest
 
 router = APIRouter(prefix="/api/v1/upload", tags=["upload"])
 
@@ -42,11 +44,23 @@ async def upload_pdf(
             uploaded_at=datetime.now(timezone.utc)
         )
         
-        # Orchestrator를 통해 처리
-        orchestrator = UploadOrchestrator()
-        result = await orchestrator.process_upload(upload_request, file_content)
+        # 1. 파일 업로드 처리
+        upload_orchestrator = UploadOrchestrator()
+        upload_result = await upload_orchestrator.process_upload(upload_request, file_content)
         
-        return result
+        # 2. 즉시 PDF 처리 시작
+        pdf_orchestrator = PdfOrchestrator()
+        pdf_request = PdfProcessingRequest(
+            document_id=upload_request.document_id,
+            metadata=upload_request.metadata
+        )
+        
+        # PDF 처리 실행 (텍스트 추출, 청킹, 임베딩 생성, 벡터 저장)
+        await pdf_orchestrator.process_pdf(pdf_request)
+        
+        # 처리 완료된 결과 반환
+        upload_result.message = "File uploaded and processed successfully"
+        return upload_result
         
     except HTTPException:
         # HTTPException은 그대로 전달
