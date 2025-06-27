@@ -26,6 +26,8 @@ services:
   zookeeper:
     image: confluentinc/cp-zookeeper:latest
     container_name: iacsrag_zookeeper
+    ports:
+    - "2181:2181"  # 포트 노출 추가
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
