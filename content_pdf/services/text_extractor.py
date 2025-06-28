@@ -27,12 +27,16 @@ class PdfTextExtractor:
         file_content = await grid_out.read()
         
         # 3. 메모리에서 직접 PDF 처리
-        with pdfplumber.open(io.BytesIO(file_content)) as pdf:
-            text = ""
-            for page_num, page in enumerate(pdf.pages):
-                page_text = page.extract_text()
-                if page_text:
-                    text += f"[Page {page_num + 1}]\n{page_text}\n\n"
+        try:
+            with pdfplumber.open(io.BytesIO(file_content)) as pdf:
+                text = ""
+                for page_num, page in enumerate(pdf.pages):
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += f"[Page {page_num + 1}]\n{page_text}\n\n"
+        except Exception as e:
+            logger.error(f"Failed to extract text from PDF: {document_id}, Error: {e}")
+            raise
         
         logger.info(f"Extracted {len(text)} characters from PDF: {document_id}")
         

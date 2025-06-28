@@ -77,6 +77,10 @@ class Settings(BaseSettings):
     PROCESSING_LOG_MAX_SIZE: str = "10MB"
     PROCESSING_LOG_BACKUP_COUNT: int = 5
     
+    # PDF 임베딩 재시도 설정
+    PDF_EMBEDDING_MAX_RETRIES: int = 3
+    PDF_EMBEDDING_RETRY_DELAY: float = 1.0
+
     class Config:
         env_file = ".env.development"
         case_sensitive = True

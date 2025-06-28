@@ -38,54 +38,53 @@ class BatchProcessor:
             await self._process_batch()
         return self.stats
     
-    # content_pdf/services/batch_processor.py 수정
-async def _process_batch(self):
-    """배치 처리 - 임베딩 + 저장"""
-    batch_number = self.stats['batches_processed'] + 1
-    batch_size = len(self.current_batch)
-    
-    logger.info(f"Processing batch {batch_number} with {batch_size} chunks")
-    
-    try:
-        # 1. MongoDB에 청크 저장
-        chunk_ids = await self.storage_service.save_chunks(self.current_batch)
-        self.stats['chunks_saved'] += len(chunk_ids)
+    async def _process_batch(self):
+        """배치 처리 - 임베딩 + 저장"""
+        batch_number = self.stats['batches_processed'] + 1
+        batch_size = len(self.current_batch)
         
-        # 2. 멀티플렉싱으로 임베딩 생성
-        embedding_start = asyncio.get_event_loop().time()  # 시간 측정 시작
+        logger.info(f"Processing batch {batch_number} with {batch_size} chunks")
         
-        processing_logger.embedding_started(
-            document_id=self.document_id,
-            chunk_count=batch_size,
-            model=self.embedding_service.model
-        )
-        
-        embeddings = await self.embedding_service.generate_embeddings_batch(
-            self.current_batch
-        )
-        
-        embedding_duration = asyncio.get_event_loop().time() - embedding_start  # 시간 계산
-        
-        if embeddings:
-            # 3. Qdrant에 벡터 저장
-            await self.storage_service.save_embeddings(embeddings, self.current_batch)
-            self.stats['embeddings_created'] += len(embeddings)
+        try:
+            # 1. MongoDB에 청크 저장
+            chunk_ids = await self.storage_service.save_chunks(self.current_batch)
+            self.stats['chunks_saved'] += len(chunk_ids)
             
-            processing_logger.embedding_completed(
+            # 2. 멀티플렉싱으로 임베딩 생성
+            embedding_start = asyncio.get_event_loop().time()  # 시간 측정 시작
+            
+            processing_logger.embedding_started(
                 document_id=self.document_id,
-                duration=embedding_duration,  # 실제 시간 전달
-                embedding_count=len(embeddings)
+                chunk_count=batch_size,
+                model=self.embedding_service.model
             )
-        else:
-            self.stats['embedding_errors'] += 1
-            logger.error(f"No embeddings generated for batch {batch_number}")
-        
-        # 통계 업데이트
-        self.stats['batches_processed'] += 1
-        
-    except Exception as e:
-        self.stats['storage_errors'] += 1
-        logger.error(f"Batch {batch_number} processing failed: {e}")
-        raise
-    finally:
-        self.current_batch = []
+            
+            embeddings = await self.embedding_service.generate_embeddings_batch(
+                self.current_batch
+            )
+            
+            embedding_duration = asyncio.get_event_loop().time() - embedding_start  # 시간 계산
+            
+            if embeddings:
+                # 3. Qdrant에 벡터 저장
+                await self.storage_service.save_embeddings(embeddings, self.current_batch)
+                self.stats['embeddings_created'] += len(embeddings)
+                
+                processing_logger.embedding_completed(
+                    document_id=self.document_id,
+                    duration=embedding_duration,  # 실제 시간 전달
+                    embedding_count=len(embeddings)
+                )
+            else:
+                self.stats['embedding_errors'] += 1
+                logger.error(f"No embeddings generated for batch {batch_number}")
+            
+            # 통계 업데이트
+            self.stats['batches_processed'] += 1
+            
+        except Exception as e:
+            self.stats['storage_errors'] += 1
+            logger.error(f"Batch {batch_number} processing failed: {e}")
+            raise
+        finally:
+            self.current_batch = []
