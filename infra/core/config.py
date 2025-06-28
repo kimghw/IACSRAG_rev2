@@ -38,15 +38,19 @@ class Settings(BaseSettings):
     # File Upload
     TEMP_UPLOAD_DIR: str = "./temp/uploads"
     MAX_UPLOAD_SIZE: int = 52428800  # 50MB
+
+    # Upload 설정
+    UPLOAD_APPLY_HASHER: bool = False  # 파일 중복 검사 활성화
+
     
     # ===== PDF Processing 설정 =====
     
     # PDF 처리 - 멀티플렉싱 및 동시성
-    PDF_BATCH_SIZE: int = 50  # 메인 배치 크기 (청크 배치)
-    PDF_SUB_BATCH_SIZE: int = 10  # OpenAI API 서브 배치 크기
-    PDF_MAX_CONCURRENT_PROCESSING: int = 3  # 동시 처리 PDF 개수
-    PDF_MAX_CONCURRENT_API_CALLS: int = 5  # 동시 OpenAI API 호출 수
-    PDF_MAX_CONCURRENT_BATCHES: int = 3  # 동시 처리 배치 수
+    PDF_BATCH_SIZE: int = 300  # 메인 배치 크기 (청크 배치)
+    PDF_SUB_BATCH_SIZE: int = 300 # OpenAI API 서브 배치 크기
+    PDF_MAX_CONCURRENT_PROCESSING: int = 5 # 동시 처리 PDF 개수
+    PDF_MAX_CONCURRENT_API_CALLS: int = 7  # 동시 OpenAI API 호출 수
+    PDF_MAX_CONCURRENT_BATCHES: int = 5  # 동시 처리 배치 수
     
     # PDF 처리 - 청킹 전략
     PDF_CHUNKING_STRATEGY: str = "character"  # character|token|semantic
@@ -67,7 +71,7 @@ class Settings(BaseSettings):
     # ===== Logging 설정 =====
     
     # General Logging
-    LOG_LEVEL: str = "DEBUG"
+    LOG_LEVEL: str = "INFO"
     
     # Processing Logging
     PROCESSING_LOG_MODE: str = "console"  # file|console|both|none

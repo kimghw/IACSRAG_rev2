@@ -48,8 +48,10 @@ class UploadRepository:
             document["quick_hash"] = quick_hash
         
         await self.mongo.insert_one("uploads", document)
-        logger.debug(f"Saved upload metadata for document: {upload_request.document_id}" + 
-                    (f" with hash: {quick_hash[:16]}..." if quick_hash else ""))
+        if quick_hash:
+            logger.debug(f"Saved upload metadata for document: {upload_request.document_id} with hash: {quick_hash[:16]}...")
+        else:
+            logger.debug(f"Saved upload metadata for document: {upload_request.document_id} (no hash)")
     
     async def update_upload_status(self, document_id: str, status: str, error_message: str = None):
         """업로드 상태 업데이트"""
@@ -70,6 +72,10 @@ class UploadRepository:
     async def find_by_hash(self, quick_hash: str) -> Optional[Dict[str, Any]]:
         """quick_hash로 문서 조회 (중복 검사용)"""
         return await self.mongo.find_one("uploads", {"quick_hash": quick_hash})
+    
+    async def find_by_quick_hash(self, quick_hash: str) -> Optional[Dict[str, Any]]:
+        """quick_hash로 문서 조회 (중복 검사용) - 별칭 메서드"""
+        return await self.find_by_hash(quick_hash)
     
     async def get_document_by_id(self, document_id: str) -> Optional[Dict[str, Any]]:
         """document_id로 문서 조회"""

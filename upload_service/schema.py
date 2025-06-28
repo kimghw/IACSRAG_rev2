@@ -27,7 +27,16 @@ class ValidationResult(BaseModel):
     is_valid: bool
     error_message: Optional[str] = None
 
-# === 배치 업로드 관련 스키마 (단순화) ===
+# === 배치 업로드 관련 스키마 ===
+class FileUploadData(BaseModel):
+    """Router에서 Orchestrator로 전달할 파일 데이터"""
+    filename: str
+    content: bytes
+    
+    class Config:
+        # bytes 타입 처리를 위한 설정
+        arbitrary_types_allowed = True
+
 class BatchUploadResult(BaseModel):
     """개별 파일 업로드 결과"""
     document_id: str
