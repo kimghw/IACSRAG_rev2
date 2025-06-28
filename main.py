@@ -16,6 +16,7 @@ from infra.api.upload_router import router as upload_router
 from infra.core.config import settings
 from infra.events.event_producer import EventProducer
 from infra.events.document_event_router import DocumentEventRouter
+from infra.events.handlers import DOCUMENT_HANDLERS  # 핸들러 레지스트리 임포트
 from schema import DocumentEventType
 
 # 로깅 설정
@@ -35,22 +36,6 @@ logging.getLogger("aiokafka.cluster").setLevel(logging.WARNING)
 # 전역 변수
 app_state = {}
 
-# 이벤트 핸들러들 (임시 - 추후 각 모듈로 이동)
-async def handle_pdf_event(event_data: dict):
-    """PDF 이벤트 핸들러"""
-    logger.info(f"📄 Processing PDF: {event_data.get('document_id')}")
-    # TODO: PDF 처리 로직 추가
-
-async def handle_markdown_event(event_data: dict):
-    """Markdown 이벤트 핸들러"""
-    logger.info(f"📝 Processing Markdown: {event_data.get('document_id')}")
-    # TODO: Markdown 처리 로직 추가
-
-async def handle_json_event(event_data: dict):
-    """JSON 이벤트 핸들러"""
-    logger.info(f"📊 Processing JSON: {event_data.get('document_id')}")
-    # TODO: JSON 처리 로직 추가
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """애플리케이션 생명주기 관리"""
@@ -61,11 +46,13 @@ async def lifespan(app: FastAPI):
     producer = EventProducer()
     await producer._ensure_producer()
     
-    # Document Event Router 생성 및 핸들러 등록
+    # Document Event Router 생성
     document_router = DocumentEventRouter()
-    document_router.register_handler(DocumentEventType.PDF, handle_pdf_event)
-    document_router.register_handler(DocumentEventType.MARKDOWN, handle_markdown_event)
-    document_router.register_handler(DocumentEventType.JSON, handle_json_event)
+    
+    # 핸들러 레지스트리에서 핸들러 등록
+    for event_type, handler in DOCUMENT_HANDLERS.items():
+        document_router.register_handler(event_type, handler)
+        logger.info(f"📌 Registered handler for {event_type.value}")
     
     # Document Event Router 시작
     router_task = asyncio.create_task(document_router.start())
@@ -74,6 +61,7 @@ async def lifespan(app: FastAPI):
     
     logger.info("✅ Document Event Router started")
     logger.info(f"📡 Listening on topic: {settings.KAFKA_TOPIC_DOCUMENT_UPLOADED}")
+    logger.info(f"🔧 Registered handlers: {[e.value for e in DOCUMENT_HANDLERS.keys()]}")
     
     yield
     
@@ -119,6 +107,7 @@ async def root():
             "upload_pdf": "/api/v1/upload/pdf",
             "upload_markdown": "/api/v1/upload/markdown",
             "upload_json": "/api/v1/upload/json",
+            "upload_batch": "/api/v1/upload/batch",
             "supported_types": "/api/v1/upload/supported-types",
             "health": "/health",
             "docs": "/docs"
@@ -128,12 +117,16 @@ async def root():
 @app.get("/health")
 async def health_check():
     """헬스체크 엔드포인트"""
+    # 등록된 핸들러 정보 추가
+    registered_handlers = list(DOCUMENT_HANDLERS.keys()) if DOCUMENT_HANDLERS else []
+    
     return {
         "status": "healthy",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "services": {
             "api": "running",
-            "document_router": "running" if app_state.get('router_task') and not app_state['router_task'].done() else "stopped"
+            "document_router": "running" if app_state.get('router_task') and not app_state['router_task'].done() else "stopped",
+            "registered_handlers": [h.value for h in registered_handlers]
         }
     }
 
