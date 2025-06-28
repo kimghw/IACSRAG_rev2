@@ -26,9 +26,11 @@ class UploadOrchestrator:
         self.repository = UploadRepository()
         self.event_publisher = EventPublisher()
         self.file_hasher = FileHasher()
-        # 동시 업로드 처리 제한
-        self.max_concurrent_uploads = 10
+        # 환경 설정에서 가져오기
+        self.max_concurrent_uploads = settings.UPLOAD_MAX_CONCURRENT
         self.upload_semaphore = asyncio.Semaphore(self.max_concurrent_uploads)
+        
+        logger.info(f"Upload orchestrator initialized with max concurrent uploads: {self.max_concurrent_uploads}")
         
         # 지원하는 파일 확장자와 DocumentEventType 매핑
         self.FILE_TYPE_MAPPING = {

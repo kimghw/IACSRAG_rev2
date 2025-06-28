@@ -41,7 +41,7 @@ class Settings(BaseSettings):
 
     # Upload 설정
     UPLOAD_APPLY_HASHER: bool = False  # 파일 중복 검사 활성화
-
+    UPLOAD_MAX_CONCURRENT: int = 10  # 동시 업로드 처리 수 제한
     
     # ===== PDF Processing 설정 =====
     

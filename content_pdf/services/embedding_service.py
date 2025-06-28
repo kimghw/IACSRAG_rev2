@@ -20,12 +20,14 @@ class EmbeddingService:
         self.base_url = settings.OPENAI_BASE_URL
         self.model = settings.OPENAI_EMBEDDING_MODEL
         
-        # 동시성 제어
-        self.max_concurrent = getattr(settings, 'PDF_MAX_CONCURRENT_API_CALLS', 5)
+        # 동시성 제어 - 환경 설정에서 가져오기
+        self.max_concurrent = settings.PDF_MAX_CONCURRENT_API_CALLS
         self.semaphore = asyncio.Semaphore(self.max_concurrent)
         
+        logger.info(f"Embedding service initialized with max concurrent API calls: {self.max_concurrent}")
+        
         # 배치 크기
-        self.sub_batch_size = getattr(settings, 'PDF_SUB_BATCH_SIZE', 20)
+        self.sub_batch_size = settings.PDF_SUB_BATCH_SIZE
         
         # HTTP 클라이언트 설정
         self.headers = {
