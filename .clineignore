@@ -2,10 +2,10 @@
 # 이 파일은 Cline이 특정 파일이나 디렉토리를 무시하도록 설정합니다.
 
 # 환경 설정 파일 (민감한 정보 포함)
-.env*
-*.env
+#.env*
+#*.env
 .env.local
-.env.development
+#.env.development
 .env.production
 
 # Python 관련

@@ -43,13 +43,13 @@ class Settings(BaseSettings):
     
     # PDF 처리 - 멀티플렉싱 및 동시성
     PDF_BATCH_SIZE: int = 50  # 메인 배치 크기 (청크 배치)
-    PDF_SUB_BATCH_SIZE: int = 20  # OpenAI API 서브 배치 크기
+    PDF_SUB_BATCH_SIZE: int = 10  # OpenAI API 서브 배치 크기
     PDF_MAX_CONCURRENT_PROCESSING: int = 3  # 동시 처리 PDF 개수
     PDF_MAX_CONCURRENT_API_CALLS: int = 5  # 동시 OpenAI API 호출 수
     PDF_MAX_CONCURRENT_BATCHES: int = 3  # 동시 처리 배치 수
     
     # PDF 처리 - 청킹 전략
-    PDF_CHUNKING_STRATEGY: str = "semantic"  # character|token|semantic
+    PDF_CHUNKING_STRATEGY: str = "character"  # character|token|semantic
     
     # Character 청킹 설정
     PDF_CHUNK_SIZE: int = 1000  # 최대 청크 크기 (문자 수)

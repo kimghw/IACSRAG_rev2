@@ -7,9 +7,11 @@ from typing import List, Dict, Any
 
 from .repository import UploadRepository
 from .event_publisher import EventPublisher
+from .file_hasher import FileHasher
 from .schema import UploadRequest, UploadResponse
 from schema import ProcessingStatus, DocumentEventType, DocumentUploadedEvent
 from infra.core.processing_logger import processing_logger
+from infra.core.config import settings
 import logging
 
 logger = logging.getLogger(__name__)
@@ -38,9 +40,10 @@ class UploadOrchestrator:
     async def process_upload(self, upload_request: UploadRequest, file_content: bytes) -> UploadResponse:
         """
         단일 파일 업로드 처리
-        1. MongoDB에 파일 저장 (GridFS)
-        2. 메타데이터 저장
-        3. 파일 타입에 맞는 이벤트 발행
+        1. 파일 해시 생성 (설정에 따라)
+        2. MongoDB에 파일 저장 (GridFS)
+        3. 메타데이터 저장
+        4. 파일 타입에 맞는 이벤트 발행
         """
         async with self.upload_semaphore:  # 동시 업로드 수 제한
             start_time = time.time()
@@ -53,12 +56,31 @@ class UploadOrchestrator:
             )
             
             try:
+                # 파일 해시 생성 (설정에 따라)
+                quick_hash = None
+                if settings.UPLOAD_APPLY_HASHER:
+                    quick_hash = FileHasher.generate_quick_hash(
+                        upload_request.filename, 
+                        file_content
+                    )
+                    logger.info(f"Generated quick hash: {quick_hash[:16]}... for {upload_request.filename}")
+                    
+                    # 중복 파일 확인 (선택사항)
+                    existing = await self.repository.find_by_hash(quick_hash)
+                    if existing:
+                        logger.warning(f"Duplicate file detected with hash: {quick_hash[:16]}...")
+                        logger.warning(f"Existing document: {existing.get('document_id')}")
+                
                 # 파일 타입에 따른 이벤트 타입 결정
                 event_type = self._determine_event_type(upload_request.filename)
                 logger.info(f"Determined event type: {event_type.value} for file: {upload_request.filename}")
                 
-                # MongoDB에 파일과 메타데이터 저장
-                await self.repository.save_upload_with_file(upload_request, file_content)
+                # MongoDB에 파일과 메타데이터 저장 (해시 포함)
+                await self.repository.save_upload_with_file(
+                    upload_request, 
+                    file_content,
+                    quick_hash
+                )
                 
                 # 이벤트 발행 - 파일 타입별로 구분
                 event = DocumentUploadedEvent(

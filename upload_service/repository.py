@@ -13,11 +13,11 @@ class UploadRepository:
     def __init__(self):
         self.mongo = MongoDB()
     
-    async def save_upload_with_file(self, upload_request: UploadRequest, file_content: bytes):
+    async def save_upload_with_file(self, upload_request: UploadRequest, file_content: bytes, quick_hash: Optional[str] = None):
         """
         파일 내용과 메타데이터 저장
         1. GridFS에 파일 저장
-        2. uploads 컬렉션에 메타데이터 저장
+        2. uploads 컬렉션에 메타데이터 저장 (해시 포함)
         """
         # GridFS로 파일 저장
         fs = AsyncIOMotorGridFSBucket(self.mongo.db)
@@ -43,8 +43,13 @@ class UploadRepository:
             "created_at": datetime.now(timezone.utc)
         }
         
+        # 해시가 있으면 추가
+        if quick_hash:
+            document["quick_hash"] = quick_hash
+        
         await self.mongo.insert_one("uploads", document)
-        logger.debug(f"Saved upload metadata for document: {upload_request.document_id}")
+        logger.debug(f"Saved upload metadata for document: {upload_request.document_id}" + 
+                    (f" with hash: {quick_hash[:16]}..." if quick_hash else ""))
     
     async def update_upload_status(self, document_id: str, status: str, error_message: str = None):
         """업로드 상태 업데이트"""
@@ -61,6 +66,10 @@ class UploadRepository:
             filter={"document_id": document_id},
             update={"$set": update_data}
         )
+    
+    async def find_by_hash(self, quick_hash: str) -> Optional[Dict[str, Any]]:
+        """quick_hash로 문서 조회 (중복 검사용)"""
+        return await self.mongo.find_one("uploads", {"quick_hash": quick_hash})
     
     async def get_document_by_id(self, document_id: str) -> Optional[Dict[str, Any]]:
         """document_id로 문서 조회"""

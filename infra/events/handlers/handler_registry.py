@@ -2,7 +2,7 @@
 from typing import Dict, Callable, Awaitable, Any
 from schema import DocumentEventType
 from .content_pdf_handler import handle_pdf_event
-from .content_md_handler import handle_markdown_event
+from .content_md_handler import handle_markdown_event  # 파일명 수정됨
 from .content_json_handler import handle_json_event
 
 # 핸들러 레지스트리
