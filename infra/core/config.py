@@ -39,13 +39,34 @@ class Settings(BaseSettings):
     TEMP_UPLOAD_DIR: str = "./temp/uploads"
     MAX_UPLOAD_SIZE: int = 52428800  # 50MB
     
-    # PDF Processing
-    PDF_BATCH_SIZE: int = 50  # 배치당 청크 수
-    PDF_CHUNK_SIZE: int = 1000
-    PDF_CHUNK_OVERLAP: int = 200
-    PDF_MAX_CONCURRENT_PROCESSING: int = 3  # 동시 처리 PDF 개수 추가
+    # ===== PDF Processing 설정 =====
     
-    # Logging
+    # PDF 처리 - 멀티플렉싱 및 동시성
+    PDF_BATCH_SIZE: int = 50  # 메인 배치 크기 (청크 배치)
+    PDF_SUB_BATCH_SIZE: int = 20  # OpenAI API 서브 배치 크기
+    PDF_MAX_CONCURRENT_PROCESSING: int = 3  # 동시 처리 PDF 개수
+    PDF_MAX_CONCURRENT_API_CALLS: int = 5  # 동시 OpenAI API 호출 수
+    PDF_MAX_CONCURRENT_BATCHES: int = 3  # 동시 처리 배치 수
+    
+    # PDF 처리 - 청킹 전략
+    PDF_CHUNKING_STRATEGY: str = "semantic"  # character|token|semantic
+    
+    # Character 청킹 설정
+    PDF_CHUNK_SIZE: int = 1000  # 최대 청크 크기 (문자 수)
+    PDF_CHUNK_OVERLAP: int = 200  # 청크 간 오버랩 크기
+    
+    # Token 청킹 설정
+    PDF_TOKEN_MODEL: str = "gpt-3.5-turbo"  # 토큰 계산용 모델
+    PDF_MAX_TOKENS_PER_CHUNK: int = 500  # 청크당 최대 토큰 수
+    PDF_TOKEN_OVERLAP: int = 50  # 토큰 단위 오버랩
+    
+    # Semantic 청킹 설정
+    PDF_SEMANTIC_SIMILARITY_THRESHOLD: float = 0.8  # 의미적 유사도 임계값
+    PDF_SEMANTIC_MODEL: str = "text-embedding-ada-002"  # 시멘틱 임베딩 모델
+    
+    # ===== Logging 설정 =====
+    
+    # General Logging
     LOG_LEVEL: str = "DEBUG"
     
     # Processing Logging
