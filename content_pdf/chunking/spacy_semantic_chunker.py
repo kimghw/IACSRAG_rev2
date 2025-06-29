@@ -26,20 +26,26 @@ class SpacySemanticChunker(ChunkingStrategy):
         if not SPACY_AVAILABLE:
             raise ImportError("spaCy is not installed. Please install it with: pip install spacy")
             
-        # spaCy 모델 로드 (한국어: ko_core_news_sm, 영어: en_core_web_sm)
+        # spaCy 모델 로드 (전략별 설정 사용)
         try:
-            self.nlp = spacy.load("en_core_web_sm")
+            self.nlp = spacy.load(settings.PDF_SPACY_LANGUAGE_MODEL)
         except:
-            logger.warning("spaCy model not found. Installing...")
+            logger.warning(f"spaCy model {settings.PDF_SPACY_LANGUAGE_MODEL} not found. Installing...")
             import subprocess
-            subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
-            self.nlp = spacy.load("en_core_web_sm")
+            subprocess.run(["python", "-m", "spacy", "download", settings.PDF_SPACY_LANGUAGE_MODEL])
+            self.nlp = spacy.load(settings.PDF_SPACY_LANGUAGE_MODEL)
         
-        self.max_chunk_size = settings.PDF_CHUNK_SIZE
-        self.min_chunk_size = settings.PDF_CHUNK_SIZE // 4
+        # 전략별 설정 사용
+        self.max_chunk_size = settings.PDF_SPACY_MAX_CHUNK_SIZE
+        self.min_chunk_size = settings.PDF_SPACY_MIN_CHUNK_SIZE
+        self.topic_keywords_threshold = settings.PDF_SPACY_TOPIC_THRESHOLD
         
-        # 주제 변화 감지를 위한 설정
-        self.topic_keywords_threshold = 0.3  # 주제 키워드 변화 임계값
+        # 설정값 확인 로그
+        logger.info(f"SpaCy Chunker initialized with:")
+        logger.info(f"  - max_chunk_size: {self.max_chunk_size}")
+        logger.info(f"  - min_chunk_size: {self.min_chunk_size}")
+        logger.info(f"  - topic_threshold: {self.topic_keywords_threshold}")
+        logger.info(f"  - language_model: {settings.PDF_SPACY_LANGUAGE_MODEL}")
         
     async def chunk_streaming(
         self,
@@ -50,7 +56,9 @@ class SpacySemanticChunker(ChunkingStrategy):
         """spaCy를 사용한 언어학적 청킹"""
         
         # spaCy 문서 처리
+        logger.info(f"Processing text with SpaCy, length: {len(text)} chars")
         doc = self.nlp(text)
+        logger.info(f"SpaCy processing complete. Sentences found: {len(list(doc.sents))}")
         
         chunk_index = 0
         current_chunk = []
@@ -126,6 +134,16 @@ class SpacySemanticChunker(ChunkingStrategy):
                 entities=list(current_entities),
                 topics=list(current_topics)
             )
+        
+        # 디버깅 정보 출력
+        logger.info(f"=== SpaCy Chunking Debug Info ===")
+        logger.info(f"Document ID: {document_id}")
+        logger.info(f"Total sentences processed: {sent_idx + 1}")
+        logger.info(f"Total text processed by SpaCy: {sum(len(s.text) for s in doc.sents)} chars")
+        logger.info(f"Original text length: {len(text)} chars")
+        logger.info(f"Total chunks created: {chunk_index + 1}")
+        logger.info(f"Text coverage: {(sum(len(s.text) for s in doc.sents) / len(text) * 100):.1f}%")
+        logger.info(f"=================================")
     
     def _create_chunk(
         self,
@@ -143,6 +161,9 @@ class SpacySemanticChunker(ChunkingStrategy):
             **metadata,
             "chunking_strategy": "spacy_semantic",
             "chunk_size": len(text),
+            "max_size_config": self.max_chunk_size,
+            "min_size_config": self.min_chunk_size,
+            "topic_threshold": self.topic_keywords_threshold,
             "entities": entities or [],
             "topics": topics or []
         }

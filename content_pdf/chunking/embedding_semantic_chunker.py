@@ -16,13 +16,14 @@ logger = logging.getLogger(__name__)
 class EmbeddingSemanticChunker(ChunkingStrategy):
     """임베딩 기반 의미적 청킹 전략"""
     
-    def __init__(self, embedding_service, cache_embeddings: bool = True):
+    def __init__(self, embedding_service, cache_embeddings: bool = None):
         self.embedding_service = embedding_service
-        self.max_chunk_size = settings.PDF_CHUNK_SIZE
-        self.min_chunk_size = settings.PDF_CHUNK_SIZE // 4
-        self.similarity_threshold = settings.PDF_SEMANTIC_SIMILARITY_THRESHOLD
-        self.cache_embeddings = cache_embeddings
-        self._embedding_cache = {} if cache_embeddings else None
+        # 전략별 설정 사용
+        self.max_chunk_size = settings.PDF_EMBED_MAX_CHUNK_SIZE
+        self.min_chunk_size = settings.PDF_EMBED_MIN_CHUNK_SIZE
+        self.similarity_threshold = settings.PDF_EMBED_SIMILARITY_THRESHOLD
+        self.cache_embeddings = cache_embeddings if cache_embeddings is not None else settings.PDF_EMBED_CACHE_EMBEDDINGS
+        self._embedding_cache = {} if self.cache_embeddings else None
         
         # 문장 분할 설정
         self.sentence_endings = r'[.!?][\s\n]'
@@ -240,6 +241,8 @@ class EmbeddingSemanticChunker(ChunkingStrategy):
                 **metadata,
                 "chunking_strategy": "embedding_semantic",
                 "chunk_size": len(text),
+                "max_size_config": self.max_chunk_size,
+                "min_size_config": self.min_chunk_size,
                 "similarity_threshold": self.similarity_threshold
             },
             created_at=datetime.now(timezone.utc)

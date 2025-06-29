@@ -16,9 +16,10 @@ class SemanticChunker(ChunkingStrategy):
     """의미 기반 청킹 전략"""
     
     def __init__(self):
-        self.max_chunk_size = settings.PDF_CHUNK_SIZE
-        self.min_chunk_size = settings.PDF_CHUNK_SIZE // 4  # 최소 크기
-        self.overlap_size = settings.PDF_CHUNK_OVERLAP
+        # 전략별 설정 사용
+        self.max_chunk_size = settings.PDF_SEMANTIC_MAX_CHUNK_SIZE
+        self.min_chunk_size = settings.PDF_SEMANTIC_MIN_CHUNK_SIZE
+        self.overlap_size = settings.PDF_SEMANTIC_CHUNK_OVERLAP
         
         # 의미적 경계 패턴들
         self.section_patterns = [
@@ -69,7 +70,7 @@ class SemanticChunker(ChunkingStrategy):
                         current_chunk_text += sentence
                     else:
                         # 현재 청크 생성
-                        if current_chunk_text.strip():
+                        if current_chunk_text.strip() and len(current_chunk_text.strip()) >= self.min_chunk_size:
                             yield self._create_chunk(
                                 text=current_chunk_text.strip(),
                                 chunk_index=chunk_index,
@@ -88,7 +89,7 @@ class SemanticChunker(ChunkingStrategy):
                     char_position += len(sentence)
                 
                 # 마지막 남은 텍스트 처리
-                if current_chunk_text.strip():
+                if current_chunk_text.strip() and len(current_chunk_text.strip()) >= self.min_chunk_size:
                     yield self._create_chunk(
                         text=current_chunk_text.strip(),
                         chunk_index=chunk_index,
@@ -203,6 +204,7 @@ class SemanticChunker(ChunkingStrategy):
                 "chunking_strategy": "semantic",
                 "chunk_size": len(text),
                 "chunk_size_config": self.max_chunk_size,
+                "min_size_config": self.min_chunk_size,
                 "overlap_config": self.overlap_size
             },
             created_at=datetime.now(timezone.utc)

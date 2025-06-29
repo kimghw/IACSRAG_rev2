@@ -3,10 +3,13 @@ from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
 from datetime import datetime
 
-class PdfProcessingRequest(BaseModel):
-    """PDF 처리 요청 스키마"""
+class ProcessingRequest(BaseModel):
+    """범용 텍스트 콘텐츠 처리 요청 스키마 (PDF/Markdown)"""
     document_id: str
     metadata: Dict[str, Any] = Field(default_factory=dict)
+
+# 하위 호환성을 위한 별칭
+PdfProcessingRequest = ProcessingRequest
 
 class ChunkDocument(BaseModel):
     """MongoDB에 저장될 청크 문서 스키마"""

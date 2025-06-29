@@ -126,3 +126,4 @@ yarn-error.log*
 # 여기에 프로젝트 특화 제외 항목을 추가하세요
 
 ./TODO_TRACKER.md
+file_replacer.py

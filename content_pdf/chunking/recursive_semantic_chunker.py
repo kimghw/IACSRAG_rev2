@@ -16,8 +16,11 @@ class RecursiveSemanticChunker(ChunkingStrategy):
     """재귀적 의미 단위 청킹 (LangChain 스타일)"""
     
     def __init__(self):
-        self.chunk_size = settings.PDF_CHUNK_SIZE
-        self.chunk_overlap = settings.PDF_CHUNK_OVERLAP
+        # 전략별 설정 사용
+        self.chunk_size = settings.PDF_SEMANTIC_MAX_CHUNK_SIZE
+        self.chunk_overlap = settings.PDF_SEMANTIC_CHUNK_OVERLAP
+        # min_chunk_size는 내부적으로 처리 (chunk_size의 1/4)
+        self.min_chunk_size = settings.PDF_SEMANTIC_MIN_CHUNK_SIZE
         
         # 분할 구분자 (우선순위 순)
         self.separators = [
@@ -72,6 +75,7 @@ class RecursiveSemanticChunker(ChunkingStrategy):
                     "chunking_strategy": "recursive_semantic",
                     "chunk_size": len(chunk_text),
                     "chunk_size_config": self.chunk_size,
+                    "min_size_config": self.min_chunk_size,
                     "overlap_config": self.chunk_overlap
                 },
                 created_at=datetime.now(timezone.utc)
@@ -114,7 +118,7 @@ class RecursiveSemanticChunker(ChunkingStrategy):
                     if len(current_chunk) + len(split) <= self.chunk_size:
                         current_chunk += split
                     else:
-                        if current_chunk:
+                        if current_chunk and len(current_chunk) >= self.min_chunk_size:
                             chunks.append(current_chunk)
                         
                         # 분할이 여전히 너무 크면 재귀적으로 처리
@@ -129,7 +133,7 @@ class RecursiveSemanticChunker(ChunkingStrategy):
                         else:
                             current_chunk = split
                 
-                if current_chunk:
+                if current_chunk and len(current_chunk) >= self.min_chunk_size:
                     chunks.append(current_chunk)
                 
                 return chunks
@@ -150,7 +154,8 @@ class RecursiveSemanticChunker(ChunkingStrategy):
                 if last_space > self.chunk_size // 2:  # 최소 절반 이상은 유지
                     chunk = chunk[:last_space]
             
-            chunks.append(chunk)
+            if len(chunk) >= self.min_chunk_size:
+                chunks.append(chunk)
         
         return chunks
     

@@ -12,8 +12,9 @@ class CharacterChunker(ChunkingStrategy):
     """문자 기반 청킹 전략"""
     
     def __init__(self):
-        self.chunk_size = settings.PDF_CHUNK_SIZE
-        self.chunk_overlap = settings.PDF_CHUNK_OVERLAP
+        # 전략별 설정 사용
+        self.chunk_size = settings.PDF_CHAR_CHUNK_SIZE
+        self.chunk_overlap = settings.PDF_CHAR_CHUNK_OVERLAP
     
     async def chunk_streaming(
         self,

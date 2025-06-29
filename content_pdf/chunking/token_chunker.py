@@ -13,8 +13,9 @@ class TokenChunker(ChunkingStrategy):
     """토큰 기반 청킹 전략"""
     
     def __init__(self):
+        # 전략별 설정 사용
         self.model = settings.PDF_TOKEN_MODEL
-        self.max_tokens = settings.PDF_MAX_TOKENS_PER_CHUNK
+        self.max_tokens = settings.PDF_TOKEN_MAX_TOKENS
         self.overlap_tokens = settings.PDF_TOKEN_OVERLAP
         self.encoding = tiktoken.encoding_for_model(self.model)
     
