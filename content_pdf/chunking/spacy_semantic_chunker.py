@@ -1,21 +1,31 @@
 # content_pdf/chunking/spacy_semantic_chunker.py
-import spacy
+import asyncio
 from typing import List, AsyncGenerator, Dict, Any
 from datetime import datetime, timezone
 import uuid
-import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
+
+# spaCy를 조건부로 import
+try:
+    import spacy
+    SPACY_AVAILABLE = True
+except ImportError:
+    SPACY_AVAILABLE = False
+    logger.warning("spaCy not available. SpacySemanticChunker cannot be used.")
 
 from .base import ChunkingStrategy
 from ..schema import ChunkDocument
 from infra.core.config import settings
-import logging
-
-logger = logging.getLogger(__name__)
 
 class SpacySemanticChunker(ChunkingStrategy):
     """spaCy 기반 언어학적 의미 청킹"""
     
     def __init__(self):
+        if not SPACY_AVAILABLE:
+            raise ImportError("spaCy is not installed. Please install it with: pip install spacy")
+            
         # spaCy 모델 로드 (한국어: ko_core_news_sm, 영어: en_core_web_sm)
         try:
             self.nlp = spacy.load("en_core_web_sm")
