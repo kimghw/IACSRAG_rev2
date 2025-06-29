@@ -72,9 +72,11 @@ def find_replace_files(directory: str = ".") -> List[str]:
     
     # /home/kimghw/Downloads 폴더의 *.py 파일들 찾기
     downloads_dir = "/home/kimghw/Downloads"
+    allowed_extensions = ('.py', '.txt')  # 원하는 확장자 추가 가능
+
     if os.path.exists(downloads_dir) and os.path.isdir(downloads_dir):
         for file in os.listdir(downloads_dir):
-            if file.endswith('.py') and not file.startswith('.'):
+            if file.endswith(allowed_extensions) and not file.startswith('.'):
                 file_path = os.path.join(downloads_dir, file)
                 if os.path.isfile(file_path):
                     # 파일 생성 시간 확인

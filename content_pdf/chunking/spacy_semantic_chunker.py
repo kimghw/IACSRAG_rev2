@@ -26,7 +26,7 @@ class SpacySemanticChunker(ChunkingStrategy):
         if not SPACY_AVAILABLE:
             raise ImportError("spaCy is not installed. Please install it with: pip install spacy")
             
-        # spaCy 모델 로드 (전략별 설정 사용)
+        # spaCy 모델 로드
         try:
             self.nlp = spacy.load(settings.PDF_SPACY_LANGUAGE_MODEL)
         except:
@@ -58,15 +58,18 @@ class SpacySemanticChunker(ChunkingStrategy):
         # spaCy 문서 처리
         logger.info(f"Processing text with SpaCy, length: {len(text)} chars")
         doc = self.nlp(text)
-        logger.info(f"SpaCy processing complete. Sentences found: {len(list(doc.sents))}")
+        sentences = list(doc.sents)
+        logger.info(f"SpaCy processing complete. Sentences found: {len(sentences)}")
         
         chunk_index = 0
         current_chunk = []
         current_entities = set()
         current_topics = set()
         chunk_start_char = 0
+        prev_entities = set()
+        prev_topics = set()
         
-        for sent_idx, sent in enumerate(doc.sents):
+        for sent_idx, sent in enumerate(sentences):
             # 문장의 주요 엔티티와 명사 추출
             sent_entities = {ent.text.lower() for ent in sent.ents}
             sent_nouns = {token.text.lower() for token in sent if token.pos_ in ["NOUN", "PROPN"]}
@@ -77,51 +80,77 @@ class SpacySemanticChunker(ChunkingStrategy):
                 current_entities = sent_entities
                 current_topics = sent_nouns
                 chunk_start_char = sent.start_char
+                prev_entities = sent_entities.copy()
+                prev_topics = sent_nouns.copy()
+                continue
+            
+            # 현재 청크 크기
+            current_size = sum(len(s.text) for s in current_chunk)
+            new_size = current_size + len(sent.text)
+            
+            # 주제 연속성 계산 (이전 문장과 현재 문장 비교)
+            entity_overlap = 1.0  # 기본값
+            topic_overlap = 1.0   # 기본값
+            
+            if prev_entities or sent_entities:
+                entity_overlap = len(prev_entities & sent_entities) / max(len(prev_entities | sent_entities), 1)
+            
+            if prev_topics or sent_nouns:
+                topic_overlap = len(prev_topics & sent_nouns) / max(len(prev_topics | sent_nouns), 1)
+            
+            # 평균 유사도
+            avg_overlap = (entity_overlap + topic_overlap) / 2
+            
+            # 분할 결정
+            should_split = False
+            
+            # Case 1: 크기가 최대치를 초과하면 무조건 분할
+            if new_size > self.max_chunk_size:
+                should_split = True
+                logger.debug(f"Split due to size limit: {new_size} > {self.max_chunk_size}")
+            
+            # Case 2: 주제가 크게 바뀌고 (임계값 미만) 최소 크기 이상이면 분할
+            elif avg_overlap < self.topic_keywords_threshold and current_size >= self.min_chunk_size:
+                should_split = True
+                logger.debug(f"Split due to topic change: overlap={avg_overlap:.2f} < {self.topic_keywords_threshold}, size={current_size}")
+            
+            if should_split:
+                # 현재 청크 저장
+                chunk_text = ' '.join(s.text for s in current_chunk)
+                
+                yield self._create_chunk(
+                    text=chunk_text,
+                    chunk_index=chunk_index,
+                    document_id=document_id,
+                    metadata=metadata,
+                    char_start=chunk_start_char,
+                    char_end=current_chunk[-1].end_char,
+                    entities=list(current_entities),
+                    topics=list(current_topics)
+                )
+                chunk_index += 1
+                
+                # 새 청크 시작
+                current_chunk = [sent]
+                current_entities = sent_entities
+                current_topics = sent_nouns
+                chunk_start_char = sent.start_char
             else:
-                # 주제 연속성 계산
-                entity_overlap = len(current_entities & sent_entities) / max(len(current_entities | sent_entities), 1)
-                topic_overlap = len(current_topics & sent_nouns) / max(len(current_topics | sent_nouns), 1)
-                
-                # 청크 크기 확인
-                current_size = sum(len(s.text) for s in current_chunk)
-                
-                # 주제가 연속되고 크기가 허용되면 추가
-                if ((entity_overlap > self.topic_keywords_threshold or 
-                     topic_overlap > self.topic_keywords_threshold) and
-                    current_size + len(sent.text) <= self.max_chunk_size):
-                    
-                    current_chunk.append(sent)
-                    current_entities.update(sent_entities)
-                    current_topics.update(sent_nouns)
-                else:
-                    # 청크 생성
-                    if current_size >= self.min_chunk_size:
-                        chunk_text = ' '.join(s.text for s in current_chunk)
-                        
-                        yield self._create_chunk(
-                            text=chunk_text,
-                            chunk_index=chunk_index,
-                            document_id=document_id,
-                            metadata=metadata,
-                            char_start=chunk_start_char,
-                            char_end=current_chunk[-1].end_char,
-                            entities=list(current_entities),
-                            topics=list(current_topics)
-                        )
-                        chunk_index += 1
-                    
-                    # 새 청크 시작
-                    current_chunk = [sent]
-                    current_entities = sent_entities
-                    current_topics = sent_nouns
-                    chunk_start_char = sent.start_char
+                # 현재 청크에 추가
+                current_chunk.append(sent)
+                current_entities.update(sent_entities)
+                current_topics.update(sent_nouns)
+            
+            # 다음 비교를 위해 현재 문장 정보 저장
+            prev_entities = sent_entities.copy()
+            prev_topics = sent_nouns.copy()
             
             # CPU 양보
             if sent_idx % 50 == 0:
                 await asyncio.sleep(0)
         
         # 마지막 청크 처리
-        if current_chunk and sum(len(s.text) for s in current_chunk) >= self.min_chunk_size:
+        if current_chunk:
             chunk_text = ' '.join(s.text for s in current_chunk)
             
             yield self._create_chunk(
@@ -130,20 +159,19 @@ class SpacySemanticChunker(ChunkingStrategy):
                 document_id=document_id,
                 metadata=metadata,
                 char_start=chunk_start_char,
-                char_end=current_chunk[-1].end_char,
+                char_end=current_chunk[-1].end_char if current_chunk else chunk_start_char + len(chunk_text),
                 entities=list(current_entities),
                 topics=list(current_topics)
             )
+            chunk_index += 1
         
         # 디버깅 정보 출력
-        logger.info(f"=== SpaCy Chunking Debug Info ===")
+        logger.info(f"=== SpaCy Chunking Summary ===")
         logger.info(f"Document ID: {document_id}")
-        logger.info(f"Total sentences processed: {sent_idx + 1}")
-        logger.info(f"Total text processed by SpaCy: {sum(len(s.text) for s in doc.sents)} chars")
-        logger.info(f"Original text length: {len(text)} chars")
-        logger.info(f"Total chunks created: {chunk_index + 1}")
-        logger.info(f"Text coverage: {(sum(len(s.text) for s in doc.sents) / len(text) * 100):.1f}%")
-        logger.info(f"=================================")
+        logger.info(f"Total sentences: {len(sentences)}")
+        logger.info(f"Total chunks created: {chunk_index}")
+        logger.info(f"Settings - max: {self.max_chunk_size}, min: {self.min_chunk_size}, threshold: {self.topic_keywords_threshold}")
+        logger.info(f"==============================")
     
     def _create_chunk(
         self,
@@ -181,5 +209,5 @@ class SpacySemanticChunker(ChunkingStrategy):
     
     def estimate_chunks(self, text_length: int) -> int:
         """예상 청크 수"""
-        avg_chunk_size = self.max_chunk_size * 0.7
+        avg_chunk_size = (self.max_chunk_size + self.min_chunk_size) / 2
         return int(text_length / avg_chunk_size) + 1
