@@ -1,4 +1,4 @@
-# content_email/email_embedder.py
+# content_email/services/email_embedding_service.py
 import logging
 from typing import Dict, Any, List
 import httpx
@@ -9,8 +9,8 @@ from infra.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-class EmailEmbedder:
-    """이메일 임베딩 생성기 - 배치 처리 지원"""
+class EmailEmbeddingService:
+    """이메일 임베딩 생성 서비스 - 배치 처리 지원"""
     
     def __init__(self):
         self.api_key = settings.OPENAI_API_KEY

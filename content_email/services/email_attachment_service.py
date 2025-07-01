@@ -1,6 +1,7 @@
 # content_email/services/email_attachment_service.py
 import logging
 import os
+import hashlib
 import aiofiles
 from typing import Dict, Any
 from pathlib import Path
@@ -8,7 +9,6 @@ import aiohttp
 
 from infra.core.config import settings
 from ..schema import EmailAttachmentInfo
-from ..utils.email_helpers import generate_attachment_id, sanitize_filename
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ class EmailAttachmentService:
     ) -> EmailAttachmentInfo:
         """첨부파일 처리 및 다운로드"""
         try:
-            attachment_id = generate_attachment_id(email_id, attachment.get('id', ''))
+            attachment_id = self._generate_attachment_id(email_id, attachment.get('id', ''))
             
             # 첨부파일 정보 구성
             attachment_info = EmailAttachmentInfo(
@@ -42,34 +42,47 @@ class EmailAttachmentService:
                 file_path=""
             )
             
-            # 처리 비활성화 상태면 정보만 반환
+            # 첨부파일 처리 비활성화 상태면 정보만 반환
             if not self.enabled:
                 attachment_info.download_error = "Attachment processing disabled"
                 return attachment_info
             
-            # 검증
-            validation_error = self._validate_attachment(attachment_info)
-            if validation_error:
-                attachment_info.download_error = validation_error
+            # 파일 크기 검증
+            if attachment_info.size > self.max_size:
+                attachment_info.download_error = f"File too large: {attachment_info.size} bytes (max: {self.max_size})"
                 return attachment_info
             
-            # 다운로드
+            # 파일 타입 검증
+            file_ext = Path(attachment_info.name).suffix.lower().lstrip('.')
+            if file_ext not in self.allowed_types:
+                attachment_info.download_error = f"File type not allowed: {file_ext}"
+                return attachment_info
+            
+            # 다운로드 URL이 있는 경우 다운로드 시도
             download_url = attachment.get('contentLocation') or attachment.get('@odata.mediaContentType')
+            
             if download_url:
-                file_path = await self._create_file_path(
-                    account_id=account_id,
-                    email_id=email_id,
-                    attachment_name=attachment_info.name
-                )
-                
-                success = await self._download_attachment(download_url, file_path)
-                
-                if success:
-                    attachment_info.file_path = str(file_path)
-                    attachment_info.is_downloaded = True
-                    logger.info(f"Downloaded attachment: {attachment_info.name}")
-                else:
-                    attachment_info.download_error = "Download failed"
+                try:
+                    # 저장 경로 생성
+                    file_path = await self._create_file_path(
+                        account_id=account_id,
+                        email_id=email_id,
+                        attachment_name=attachment_info.name
+                    )
+                    
+                    # 파일 다운로드
+                    success = await self._download_attachment(download_url, file_path)
+                    
+                    if success:
+                        attachment_info.file_path = str(file_path)
+                        attachment_info.is_downloaded = True
+                        logger.info(f"Downloaded attachment: {attachment_info.name}")
+                    else:
+                        attachment_info.download_error = "Download failed"
+                        
+                except Exception as e:
+                    attachment_info.download_error = str(e)
+                    logger.error(f"Failed to download attachment {attachment_info.name}: {str(e)}")
             else:
                 attachment_info.download_error = "No download URL available"
             
@@ -79,19 +92,6 @@ class EmailAttachmentService:
             logger.error(f"Failed to process attachment: {str(e)}")
             raise
     
-    def _validate_attachment(self, attachment_info: EmailAttachmentInfo) -> str:
-        """첨부파일 검증"""
-        # 파일 크기 검증
-        if attachment_info.size > self.max_size:
-            return f"File too large: {attachment_info.size} bytes (max: {self.max_size})"
-        
-        # 파일 타입 검증
-        file_ext = Path(attachment_info.name).suffix.lower().lstrip('.')
-        if file_ext not in self.allowed_types:
-            return f"File type not allowed: {file_ext}"
-        
-        return None
-    
     async def _download_attachment(self, url: str, file_path: Path) -> bool:
         """첨부파일 다운로드"""
         try:
@@ -100,12 +100,13 @@ class EmailAttachmentService:
                     if response.status == 200:
                         content = await response.read()
                         
+                        # 파일 저장
                         async with aiofiles.open(file_path, 'wb') as f:
                             await f.write(content)
                         
                         return True
                     else:
-                        logger.error(f"Download failed: HTTP {response.status}")
+                        logger.error(f"Failed to download attachment: HTTP {response.status}")
                         return False
                         
         except Exception as e:
@@ -119,7 +120,7 @@ class EmailAttachmentService:
         dir_path.mkdir(parents=True, exist_ok=True)
         
         # 파일명 안전하게 변환
-        safe_filename = sanitize_filename(attachment_name)
+        safe_filename = self._sanitize_filename(attachment_name)
         file_path = dir_path / safe_filename
         
         # 동일 파일명 존재 시 번호 추가
@@ -133,3 +134,20 @@ class EmailAttachmentService:
                 counter += 1
         
         return file_path
+    
+    def _sanitize_filename(self, filename: str) -> str:
+        """파일명 안전하게 변환"""
+        # 위험한 문자 제거
+        safe_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_"
+        sanitized = "".join(c if c in safe_chars else "_" for c in filename)
+        
+        # 빈 파일명 방지
+        if not sanitized:
+            sanitized = "attachment"
+        
+        return sanitized
+    
+    def _generate_attachment_id(self, email_id: str, attachment_id: str) -> str:
+        """첨부파일 ID 생성"""
+        content = f"attach:{email_id}:{attachment_id}"
+        return hashlib.sha256(content.encode()).hexdigest()[:16]

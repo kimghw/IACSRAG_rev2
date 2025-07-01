@@ -3,7 +3,6 @@ import asyncio
 import logging
 from typing import List, Dict, Any
 from datetime import datetime
-import uuid
 
 from infra.events.event_logger import event_logger
 
@@ -15,7 +14,7 @@ class EmailBatchProcessor:
     def __init__(
         self,
         batch_size: int,
-        orchestrator,
+        orchestrator: 'EmailOrchestrator',  # 타입 힌트 추가
         max_wait_time: float = 5.0
     ):
         self.batch_size = batch_size
@@ -90,7 +89,7 @@ class EmailBatchProcessor:
         )
     
     async def _process_batch(self, events: List[Dict[str, Any]]):
-        """배치 처리"""
+        """배치 처리 - orchestrator의 배치 처리 메서드 호출"""
         batch_id = f"batch_{datetime.utcnow().timestamp()}"
         start_time = asyncio.get_event_loop().time()
         
@@ -104,48 +103,12 @@ class EmailBatchProcessor:
         logger.info(f"Processing batch {batch_id} with {len(events)} events")
         
         try:
-            # 모든 이벤트의 이메일을 하나로 합침
-            all_emails = []
-            event_map = {}  # email_id -> event_id 매핑
-            log_id_map = {}  # email_id -> log_id 매핑
-            
-            for event in events:
-                event_id = event.get('event_id')
-                account_id = event.get('account_id')
-                emails = event.get('response_data', {}).get('value', [])
-                log_id = event.get('_log_id')
-                
-                for email in emails:
-                    # 이메일에 메타데이터 추가
-                    email['_event_id'] = event_id
-                    email['_account_id'] = account_id
-                    all_emails.append(email)
-                    event_map[email['id']] = event_id
-                    if log_id:
-                        log_id_map[email['id']] = log_id
-            
-            logger.info(f"Total emails in batch: {len(all_emails)}")
-            
-            # 오케스트레이터에 배치 처리 요청
-            from .schema import EmailProcessingRequest
-            
-            # 통합 요청 생성
-            batch_request = EmailProcessingRequest(
-                event_id=batch_id,
-                account_id="batch_processing",
-                event_data={
-                    'response_data': {'value': all_emails},
-                    'event_map': event_map,
-                    'log_id_map': log_id_map
-                }
-            )
-            
-            # 처리
-            result = await self.orchestrator.process_email(batch_request)
+            # Orchestrator의 배치 처리 메서드 호출
+            result = await self.orchestrator.process_batch_events(events)
             
             # 통계 업데이트
             self.stats['total_batches_processed'] += 1
-            self.stats['total_emails_processed'] += result.email_count
+            self.stats['total_emails_processed'] += result.get('processed_count', 0)
             
             # 평균 배치 크기 업데이트
             if self.stats['total_batches_processed'] > 0:
@@ -159,16 +122,17 @@ class EmailBatchProcessor:
             # 배치 처리 완료 로그
             await event_logger.log_batch_complete(
                 batch_log_id=batch_log_id,
-                processed_count=result.email_count,
+                processed_count=result.get('processed_count', 0),
                 processing_time=processing_time
             )
             
             # 개별 이벤트 로그 업데이트
-            for email_id, log_id in log_id_map.items():
+            for event in events:
+                log_id = event.get('_log_id')
                 if log_id:
                     await event_logger.log_event_complete(log_id)
             
-            logger.info(f"Batch processing completed: {result.email_count} emails in {processing_time:.2f}s")
+            logger.info(f"Batch processing completed: {result.get('processed_count', 0)} emails in {processing_time:.2f}s")
             
         except Exception as e:
             self.stats['failed_batches'] += 1
