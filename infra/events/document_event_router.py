@@ -7,6 +7,7 @@ import asyncio
 
 from infra.core.config import settings
 from schema import DocumentEventType
+from .event_logger import event_logger
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ class DocumentEventRouter:
             group_id=f"{settings.KAFKA_CONSUMER_GROUP_ID}-document-router",
             value_deserializer=lambda m: json.loads(m.decode('utf-8')),
             auto_offset_reset='earliest',
-            enable_auto_commit=True
+            enable_auto_commit=True  # 일단 자동 커밋 유지
         )
         
         await self.consumer.start()
@@ -55,17 +56,24 @@ class DocumentEventRouter:
             logger.info("Document Event Router stopped")
     
     async def _route_event(self, event_data: Dict[str, Any]):
-        """문서 이벤트를 적절한 핸들러로 라우팅"""
+        """문서 이벤트를 적절한 핸들러로 라우팅 - 로깅 추가"""
         event_type_str = event_data.get('event_type')
         
+        # 이벤트 처리 시작 로그
+        log_id = await event_logger.log_event_start(self.topic, event_data)
+        
         if not event_type_str:
-            logger.error(f"Event type missing in document event: {event_data}")
+            error_msg = f"Event type missing in document event: {event_data}"
+            logger.error(error_msg)
+            await event_logger.log_event_failed(log_id, error_msg)
             return
         
         try:
             event_type = DocumentEventType(event_type_str)
         except ValueError:
-            logger.error(f"Unknown document event type: {event_type_str}")
+            error_msg = f"Unknown document event type: {event_type_str}"
+            logger.error(error_msg)
+            await event_logger.log_event_failed(log_id, error_msg)
             return
         
         handler = self.handlers.get(event_type)
@@ -75,10 +83,20 @@ class DocumentEventRouter:
             try:
                 await handler(event_data)
                 logger.info(f"Successfully handled {event_type.value} event")
+                
+                # 성공 로그
+                await event_logger.log_event_complete(log_id)
+                
             except Exception as e:
-                logger.error(f"Handler failed for {event_type.value}: {str(e)}", exc_info=True)
+                error_msg = f"Handler failed for {event_type.value}: {str(e)}"
+                logger.error(error_msg, exc_info=True)
+                
+                # 실패 로그
+                await event_logger.log_event_failed(log_id, error_msg)
         else:
-            logger.warning(f"No handler registered for event type: {event_type.value}")
+            error_msg = f"No handler registered for event type: {event_type.value}"
+            logger.warning(error_msg)
+            await event_logger.log_event_failed(log_id, error_msg)
     
     async def stop(self):
         """Document Event Router 중지"""

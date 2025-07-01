@@ -42,7 +42,8 @@ class MongoInitializer(ServiceInitializer):
                 'qdrant_failures',   # Qdrant 실패 로그
                 'email_documents',   # 이메일 문서
                 'email_embeddings',  # 이메일 임베딩
-                'email_attachments'  # 이메일 첨부파일
+                'email_attachments', # 이메일 첨부파일
+                'event_logs'         # 이벤트 처리 로그 (새로 추가)
             ]
             existing = await db.list_collection_names()
             
@@ -61,7 +62,7 @@ class MongoInitializer(ServiceInitializer):
             await db.pdf_chunks.create_index([('document_id', 1), ('chunk_index', 1)])
             await db.pdf_chunks.create_index('embedding_id')
             
-            # 이메일 관련 인덱스 추가
+            # 이메일 관련 인덱스
             await db.email_documents.create_index('document_id', unique=True)
             await db.email_documents.create_index('email_id', unique=True)
             await db.email_documents.create_index('account_id')
@@ -78,6 +79,12 @@ class MongoInitializer(ServiceInitializer):
             await db.email_attachments.create_index('email_id')
             await db.email_attachments.create_index('name')
             await db.email_attachments.create_index('is_downloaded')
+            
+            # 이벤트 로그 인덱스 (새로 추가 - 간단한 버전)
+            await db.event_logs.create_index('status')
+            await db.event_logs.create_index('started_at')
+            await db.event_logs.create_index('event_type')
+            await db.event_logs.create_index('document_id')
             
             logger.info("MongoDB indexes created")
             
