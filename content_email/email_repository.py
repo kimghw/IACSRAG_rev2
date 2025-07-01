@@ -6,6 +6,7 @@ import hashlib
 
 from infra.databases.mongo_db import MongoDB
 from infra.databases.qdrant_db import QdrantDB
+from infra.core.config import settings
 from .schema import EmailAttachmentInfo
 
 logger = logging.getLogger(__name__)
@@ -16,6 +17,7 @@ class EmailRepository:
     def __init__(self):
         self.mongo = MongoDB()
         self.qdrant = QdrantDB()
+        self.collection_name = settings.QDRANT_EMAIL_COLLECTION  # 이메일 전용 컬렉션
     
     async def save_email_document(self, email_data: Dict[str, Any], account_id: str, event_id: str) -> str:
         """이메일을 MongoDB 문서로 저장"""
@@ -59,7 +61,7 @@ class EmailRepository:
     async def save_embedding(self, embedding: Dict[str, Any]) -> None:
         """임베딩을 Qdrant에 저장하고 MongoDB 문서 업데이트"""
         try:
-            # 1. Qdrant에 벡터 저장
+            # 1. Qdrant에 벡터 저장 - 이메일 전용 컬렉션 사용
             point = {
                 'id': embedding['embedding_id'],
                 'vector': embedding['embedding_vector'],
@@ -72,8 +74,8 @@ class EmailRepository:
                 }
             }
             
-            await self.qdrant.upsert_points([point])
-            logger.info(f"Saved embedding to Qdrant: {embedding['embedding_id']}")
+            await self.qdrant.upsert_points([point], collection_name=self.collection_name)
+            logger.info(f"Saved embedding to Qdrant collection '{self.collection_name}': {embedding['embedding_id']}")
             
             # 2. MongoDB에 임베딩 메타데이터 저장
             embedding_doc = {
@@ -105,7 +107,7 @@ class EmailRepository:
             if not embeddings:
                 return
             
-            # 1. Qdrant에 벡터 배치 저장
+            # 1. Qdrant에 벡터 배치 저장 - 이메일 전용 컬렉션 사용
             points = []
             for embedding in embeddings:
                 point = {
@@ -121,8 +123,8 @@ class EmailRepository:
                 }
                 points.append(point)
             
-            await self.qdrant.upsert_points(points)
-            logger.info(f"Saved {len(points)} embeddings to Qdrant")
+            await self.qdrant.upsert_points(points, collection_name=self.collection_name)
+            logger.info(f"Saved {len(points)} embeddings to Qdrant collection '{self.collection_name}'")
             
             # 2. MongoDB에 메타데이터 배치 저장
             embedding_docs = []
@@ -222,9 +224,12 @@ class EmailRepository:
             if not email_doc:
                 return None
             
-            # Qdrant에서 임베딩 조회
+            # Qdrant에서 임베딩 조회 - 이메일 전용 컬렉션 사용
             if email_doc.get('embedding_id'):
-                embedding_point = await self.qdrant.get_point(email_doc['embedding_id'])
+                embedding_point = await self.qdrant.get_point(
+                    email_doc['embedding_id'], 
+                    collection_name=self.collection_name
+                )
                 if embedding_point:
                     email_doc['embedding'] = embedding_point
             
@@ -242,6 +247,46 @@ class EmailRepository:
         except Exception as e:
             logger.error(f"Failed to get email with embedding: {str(e)}")
             return None
+    
+    async def search_emails(
+        self, 
+        query_vector: List[float], 
+        limit: int = 10,
+        account_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """이메일 벡터 검색"""
+        try:
+            # 필터 구성
+            filter_dict = None
+            if account_id:
+                filter_dict = {
+                    "must": [
+                        {"key": "account_id", "match": {"value": account_id}}
+                    ]
+                }
+            
+            # Qdrant에서 검색 - 이메일 전용 컬렉션 사용
+            results = await self.qdrant.search(
+                query_vector=query_vector,
+                limit=limit,
+                filter=filter_dict,
+                collection_name=self.collection_name
+            )
+            
+            # MongoDB에서 전체 이메일 정보 가져오기
+            enriched_results = []
+            for result in results:
+                document_id = result['payload']['document_id']
+                email_doc = await self.get_email_with_embedding(document_id)
+                if email_doc:
+                    email_doc['similarity_score'] = result['score']
+                    enriched_results.append(email_doc)
+            
+            return enriched_results
+            
+        except Exception as e:
+            logger.error(f"Failed to search emails: {str(e)}")
+            return []
     
     def _generate_document_id(self, email_id: str) -> str:
         """문서 ID 생성"""

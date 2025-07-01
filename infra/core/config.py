@@ -15,7 +15,8 @@ class Settings(BaseSettings):
     
     # Qdrant (연결정보는 환경변수에서만)
     QDRANT_URL: str
-    QDRANT_COLLECTION_NAME: str = "documents"
+    QDRANT_COLLECTION_NAME: str = "documents"  # 기본 컬렉션 (PDF, Markdown 등)
+    QDRANT_EMAIL_COLLECTION: str = "email_documents"  # 이메일 전용 컬렉션
     QDRANT_VECTOR_SIZE: int = 1536
     QDRANT_API_KEY: Optional[str] = None
     
@@ -48,6 +49,8 @@ class Settings(BaseSettings):
     EMAIL_BATCH_SIZE: int = 20                    # 한 번에 처리할 이메일 수
     EMAIL_MAX_CONCURRENT_BATCHES: int = 3         # 동시 처리 배치 수
     EMAIL_MAX_CONCURRENT_API_CALLS: int = 3       # 동시 임베딩 API 호출 수
+    EMAIL_BATCH_MAX_WAIT_TIME: float = 5.0        # 배치 최대 대기 시간 (초)
+    EMAIL_BATCH_FLUSH_INTERVAL: float = 3.0       # 배치 플러시 체크 간격 (초)
     
     # Email Attachment Processing
     EMAIL_ATTACHMENT_ENABLED: bool = True         # 첨부파일 다운로드 활성화

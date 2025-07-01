@@ -26,45 +26,54 @@ class QdrantDB:
     def _initialize_connection(self):
         """Qdrant 연결 초기화"""
         try:
-            # 최신 버전의 qdrant-client는 retry_attempts 파라미터를 지원하지 않음
             self._client = QdrantClient(
                 url=settings.QDRANT_URL,
                 api_key=settings.QDRANT_API_KEY if hasattr(settings, 'QDRANT_API_KEY') and settings.QDRANT_API_KEY else None,
-                timeout=30.0  # 타임아웃만 설정
+                timeout=30.0
             )
-            self._ensure_collection()
+            self._ensure_collections()
             logger.info("Qdrant connection initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize Qdrant connection: {str(e)}")
             raise
     
-    def _ensure_collection(self):
+    def _ensure_collections(self):
         """컬렉션 존재 확인 및 생성"""
         try:
             # 컬렉션 목록 확인
             collections = self._client.get_collections()
             collection_names = [c.name for c in collections.collections]
             
-            if settings.QDRANT_COLLECTION_NAME not in collection_names:
-                # 컬렉션이 없으면 생성
-                self._client.create_collection(
-                    collection_name=settings.QDRANT_COLLECTION_NAME,
-                    vectors_config=VectorParams(
-                        size=settings.QDRANT_VECTOR_SIZE,
-                        distance=Distance.COSINE
+            # 생성할 컬렉션 목록
+            collections_to_create = [
+                settings.QDRANT_COLLECTION_NAME,  # 기본 컬렉션 (PDF, Markdown 등)
+                settings.QDRANT_EMAIL_COLLECTION   # 이메일 전용 컬렉션
+            ]
+            
+            for collection_name in collections_to_create:
+                if collection_name not in collection_names:
+                    # 컬렉션이 없으면 생성
+                    self._client.create_collection(
+                        collection_name=collection_name,
+                        vectors_config=VectorParams(
+                            size=settings.QDRANT_VECTOR_SIZE,
+                            distance=Distance.COSINE
+                        )
                     )
-                )
-                logger.info(f"Created Qdrant collection: {settings.QDRANT_COLLECTION_NAME}")
-            else:
-                logger.info(f"Qdrant collection already exists: {settings.QDRANT_COLLECTION_NAME}")
+                    logger.info(f"Created Qdrant collection: {collection_name}")
+                else:
+                    logger.info(f"Qdrant collection already exists: {collection_name}")
                 
         except Exception as e:
-            logger.error(f"Failed to ensure collection: {str(e)}")
+            logger.error(f"Failed to ensure collections: {str(e)}")
             raise
     
-    async def upsert_points(self, points: List[Dict[str, Any]]):
-        """포인트 저장/업데이트"""
+    async def upsert_points(self, points: List[Dict[str, Any]], collection_name: str = None):
+        """포인트 저장/업데이트 - 컬렉션 이름 파라미터 추가"""
         try:
+            # 컬렉션 이름 결정
+            collection = collection_name or settings.QDRANT_COLLECTION_NAME
+            
             # PointStruct 객체로 변환
             point_structs = []
             for point in points:
@@ -77,10 +86,10 @@ class QdrantDB:
             
             # 동기 메서드 사용 (qdrant-client는 기본적으로 동기)
             self._client.upsert(
-                collection_name=settings.QDRANT_COLLECTION_NAME,
+                collection_name=collection,
                 points=point_structs
             )
-            logger.info(f"Upserted {len(points)} points to Qdrant")
+            logger.info(f"Upserted {len(points)} points to Qdrant collection: {collection}")
             
         except Exception as e:
             logger.error(f"Failed to upsert points: {str(e)}")
@@ -90,12 +99,16 @@ class QdrantDB:
         self, 
         query_vector: List[float], 
         limit: int = 10,
-        filter: Optional[Dict[str, Any]] = None
+        filter: Optional[Dict[str, Any]] = None,
+        collection_name: str = None
     ) -> List[Dict[str, Any]]:
-        """벡터 검색"""
+        """벡터 검색 - 컬렉션 이름 파라미터 추가"""
         try:
+            # 컬렉션 이름 결정
+            collection = collection_name or settings.QDRANT_COLLECTION_NAME
+            
             results = self._client.search(
-                collection_name=settings.QDRANT_COLLECTION_NAME,
+                collection_name=collection,
                 query_vector=query_vector,
                 limit=limit,
                 query_filter=filter
@@ -114,11 +127,14 @@ class QdrantDB:
             logger.error(f"Search failed: {str(e)}")
             raise
     
-    async def get_point(self, point_id: str) -> Optional[Dict[str, Any]]:
-        """특정 포인트 조회"""
+    async def get_point(self, point_id: str, collection_name: str = None) -> Optional[Dict[str, Any]]:
+        """특정 포인트 조회 - 컬렉션 이름 파라미터 추가"""
         try:
+            # 컬렉션 이름 결정
+            collection = collection_name or settings.QDRANT_COLLECTION_NAME
+            
             points = self._client.retrieve(
-                collection_name=settings.QDRANT_COLLECTION_NAME,
+                collection_name=collection,
                 ids=[point_id]
             )
             
@@ -135,14 +151,17 @@ class QdrantDB:
             logger.error(f"Failed to get point: {str(e)}")
             return None
     
-    async def delete_points(self, point_ids: List[str]):
-        """포인트 삭제"""
+    async def delete_points(self, point_ids: List[str], collection_name: str = None):
+        """포인트 삭제 - 컬렉션 이름 파라미터 추가"""
         try:
+            # 컬렉션 이름 결정
+            collection = collection_name or settings.QDRANT_COLLECTION_NAME
+            
             self._client.delete(
-                collection_name=settings.QDRANT_COLLECTION_NAME,
+                collection_name=collection,
                 points_selector={"points": point_ids}
             )
-            logger.info(f"Deleted {len(point_ids)} points from Qdrant")
+            logger.info(f"Deleted {len(point_ids)} points from Qdrant collection: {collection}")
             
         except Exception as e:
             logger.error(f"Failed to delete points: {str(e)}")

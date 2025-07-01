@@ -14,8 +14,13 @@ class QdrantInitializer(ServiceInitializer):
     def __init__(self):
         super().__init__('iacsrag_qdrant', 'qdrant')
         self.url = settings.QDRANT_URL
-        self.collection_name = settings.QDRANT_COLLECTION_NAME
         self.vector_size = settings.QDRANT_VECTOR_SIZE
+        
+        # 초기화할 컬렉션 목록
+        self.collections = [
+            settings.QDRANT_COLLECTION_NAME,  # 기본 컬렉션 (PDF, Markdown 등)
+            settings.QDRANT_EMAIL_COLLECTION   # 이메일 전용 컬렉션
+        ]
     
     async def test_connection(self) -> bool:
         """Qdrant 연결 테스트"""
@@ -28,41 +33,46 @@ class QdrantInitializer(ServiceInitializer):
             return False
     
     async def initialize(self) -> bool:
-        """Qdrant 초기화 - 이미 존재하는 컬렉션은 패스"""
+        """Qdrant 초기화 - 모든 필요한 컬렉션 생성"""
         try:
             client = QdrantClient(url=self.url)
             
-            # 컬렉션 목록 가져오기
+            # 현재 존재하는 컬렉션 목록 가져오기
             collections = client.get_collections()
-            collection_names = [c.name for c in collections.collections]
+            existing_names = [c.name for c in collections.collections]
             
-            # 컬렉션이 이미 존재하는지 확인
-            if self.collection_name in collection_names:
-                # 이미 존재하면 정보만 출력하고 패스
-                logger.info(f"Collection '{self.collection_name}' already exists - skipping creation")
-                
-                # 기존 컬렉션 정보 출력 (선택사항)
-                try:
-                    col_info = client.get_collection(self.collection_name)
-                    logger.info(f"  - Status: {col_info.status}")
-                    logger.info(f"  - Points count: {col_info.points_count}")
-                    logger.info(f"  - Vectors count: {col_info.vectors_count}")
-                    logger.info(f"  - Vector size: {col_info.config.params.vectors.size}")
-                except Exception as e:
-                    logger.debug(f"Could not get collection info: {e}")
-            else:
-                # 컬렉션이 없으면 생성
-                logger.info(f"Creating new collection: {self.collection_name}")
-                client.create_collection(
-                    collection_name=self.collection_name,
-                    vectors_config=VectorParams(
-                        size=self.vector_size,
-                        distance=Distance.COSINE
+            # 각 컬렉션 확인 및 생성
+            for collection_name in self.collections:
+                if collection_name in existing_names:
+                    # 이미 존재하면 정보만 출력
+                    logger.info(f"Collection '{collection_name}' already exists - skipping creation")
+                    
+                    try:
+                        col_info = client.get_collection(collection_name)
+                        logger.info(f"  - Status: {col_info.status}")
+                        logger.info(f"  - Points count: {col_info.points_count}")
+                        logger.info(f"  - Vectors count: {col_info.vectors_count}")
+                        logger.info(f"  - Vector size: {col_info.config.params.vectors.size}")
+                    except Exception as e:
+                        logger.debug(f"Could not get collection info: {e}")
+                else:
+                    # 컬렉션이 없으면 생성
+                    logger.info(f"Creating new collection: {collection_name}")
+                    client.create_collection(
+                        collection_name=collection_name,
+                        vectors_config=VectorParams(
+                            size=self.vector_size,
+                            distance=Distance.COSINE
+                        )
                     )
-                )
-                logger.info(f"✅ Created collection: {self.collection_name}")
-                logger.info(f"  - Vector size: {self.vector_size}")
-                logger.info(f"  - Distance metric: COSINE")
+                    logger.info(f"✅ Created collection: {collection_name}")
+                    logger.info(f"  - Vector size: {self.vector_size}")
+                    logger.info(f"  - Distance metric: COSINE")
+            
+            # 컬렉션별 용도 설명
+            logger.info("\n📁 Collection Summary:")
+            logger.info(f"  - '{settings.QDRANT_COLLECTION_NAME}': PDF, Markdown, and other documents")
+            logger.info(f"  - '{settings.QDRANT_EMAIL_COLLECTION}': Email documents only")
             
             return True
             
