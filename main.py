@@ -16,7 +16,8 @@ from infra.api.upload_router import router as upload_router
 from infra.core.config import settings
 from infra.events.event_producer import EventProducer
 from infra.events.document_event_router import DocumentEventRouter
-from infra.events.handlers import DOCUMENT_HANDLERS  # 핸들러 레지스트리 임포트
+from infra.events.email_event_consumer import EmailEventConsumer
+from infra.events.handlers import DOCUMENT_HANDLERS
 from schema import DocumentEventType
 
 # 로깅 설정
@@ -59,8 +60,17 @@ async def lifespan(app: FastAPI):
     app_state['document_router'] = document_router
     app_state['router_task'] = router_task
     
+    # Email Event Consumer 시작
+    email_consumer = EmailEventConsumer()
+    email_task = asyncio.create_task(email_consumer.start())
+    app_state['email_consumer'] = email_consumer
+    app_state['email_task'] = email_task
+    
     logger.info("✅ Document Event Router started")
-    logger.info(f"📡 Listening on topic: {settings.KAFKA_TOPIC_DOCUMENT_UPLOADED}")
+    logger.info("✅ Email Event Consumer started")
+    logger.info(f"📡 Listening on topics:")
+    logger.info(f"   - {settings.KAFKA_TOPIC_DOCUMENT_UPLOADED}")
+    logger.info(f"   - {settings.KAFKA_TOPIC_EMAIL_RECEIVED}")
     logger.info(f"🔧 Registered handlers: {[e.value for e in DOCUMENT_HANDLERS.keys()]}")
     
     yield
@@ -79,6 +89,17 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
     
+    # Email Event Consumer 중지
+    if 'email_consumer' in app_state:
+        await app_state['email_consumer'].stop()
+    
+    if 'email_task' in app_state:
+        app_state['email_task'].cancel()
+        try:
+            await app_state['email_task']
+        except asyncio.CancelledError:
+            pass
+    
     # 프로듀서 종료
     await EventProducer.shutdown()
     
@@ -88,7 +109,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="IACSRAG Content Processing API",
     version="2.0.0",
-    description="Event-driven content processing system with PDF, Markdown, and JSON support",
+    description="Event-driven content processing system with PDF, Markdown, JSON, and Email support",
     lifespan=lifespan
 )
 
@@ -126,6 +147,7 @@ async def health_check():
         "services": {
             "api": "running",
             "document_router": "running" if app_state.get('router_task') and not app_state['router_task'].done() else "stopped",
+            "email_consumer": "running" if app_state.get('email_task') and not app_state['email_task'].done() else "stopped",
             "registered_handlers": [h.value for h in registered_handlers]
         }
     }

@@ -1,6 +1,6 @@
 # infra/core/config.py
 from pydantic_settings import BaseSettings
-from typing import Optional
+from typing import Optional, List
 
 class Settings(BaseSettings):
     """전역 설정 관리"""
@@ -42,6 +42,28 @@ class Settings(BaseSettings):
     # Upload 설정
     UPLOAD_APPLY_HASHER: bool = False  # 파일 중복 검사 활성화
     UPLOAD_MAX_CONCURRENT: int = 10  # 동시 업로드 처리 수 제한
+    
+    # ===== Email Processing =====
+    # Email Batch Processing
+    EMAIL_BATCH_SIZE: int = 20                    # 한 번에 처리할 이메일 수
+    EMAIL_MAX_CONCURRENT_BATCHES: int = 3         # 동시 처리 배치 수
+    EMAIL_MAX_CONCURRENT_API_CALLS: int = 3       # 동시 임베딩 API 호출 수
+    
+    # Email Attachment Processing
+    EMAIL_ATTACHMENT_ENABLED: bool = True         # 첨부파일 다운로드 활성화
+    EMAIL_ATTACHMENT_MAX_SIZE: int = 52428800     # 최대 첨부파일 크기 (50MB)
+    EMAIL_ATTACHMENT_ALLOWED_TYPES: str = "pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv,json,xml,zip"
+    EMAIL_ATTACHMENT_BASE_PATH: str = "./temp/email_attachments"
+    
+    # Email Embedding Configuration
+    EMAIL_EMBEDDING_TEXT_LIMIT: int = 500         # 임베딩 텍스트 저장 제한
+    EMAIL_EMBEDDING_RETRY_COUNT: int = 3          # 임베딩 실패 시 재시도 횟수
+    EMAIL_EMBEDDING_RETRY_DELAY: float = 1.0      # 재시도 간격 (초)
+    
+    @property
+    def email_attachment_allowed_types_list(self) -> List[str]:
+        """허용된 첨부파일 타입 리스트로 변환"""
+        return [ext.strip() for ext in self.EMAIL_ATTACHMENT_ALLOWED_TYPES.split(',')]
     
     # ===== PDF Processing - 청킹 전략 선택 =====
     PDF_CHUNKING_STRATEGY: str = "character"  # character|token|semantic|recursive_semantic|spacy_semantic|embedding_semantic

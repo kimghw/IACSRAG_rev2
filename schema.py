@@ -14,7 +14,7 @@ class ProcessingStatus(str, Enum):
 class DocumentEventType(str, Enum):
     """문서 이벤트 타입 enum - 파일 타입과 content-type 통합"""
     PDF = "pdf_type"
-    MARKDOWN = "markdown_type"
+    MARKDOWN = "markdown_type"  
     JSON = "json_type"
     EMAIL = "email_type"
     
@@ -73,4 +73,14 @@ class DocumentUploadedEvent(BaseModel):
     file_size: int
     metadata: Dict[str, Any] = Field(default_factory=dict)
     uploaded_at: datetime
+    event_timestamp: datetime
+
+# === 이메일 이벤트 스키마 추가 ===
+class EmailReceivedEvent(BaseModel):
+    """email.received 이벤트 스키마"""
+    event_id: str
+    account_id: str
+    email_count: int
+    response_data: Dict[str, Any]  # MS Graph API 응답
+    occurred_at: datetime
     event_timestamp: datetime
