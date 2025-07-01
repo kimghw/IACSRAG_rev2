@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from contextlib import asynccontextmanager
 import logging
 from infra.api.upload_router import router as upload_router
+from infra.api.event_log_router import router as event_log_router
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ def create_app() -> FastAPI:
     
     # 라우터 등록
     app.include_router(upload_router)
+    app.include_router(event_log_router)  # 이벤트 로그 라우터 추가
     
     # 헬스체크 엔드포인트
     @app.get("/health")

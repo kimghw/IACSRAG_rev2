@@ -7,11 +7,12 @@ import asyncio
 
 from infra.core.config import settings
 from infra.events.handlers import handle_email_event
+from .event_logger import event_logger
 
 logger = logging.getLogger(__name__)
 
 class EmailEventConsumer:
-    """email.received 토픽을 구독하고 이메일 이벤트 처리"""
+    """email.received 토픽을 구독하고 이메일 이벤트 처리 - 로깅 추가"""
     
     def __init__(self):
         self.consumer = None
@@ -39,10 +40,24 @@ class EmailEventConsumer:
                 if not self._running:
                     break
                 
+                # 이벤트 처리 시작 로그
+                log_id = None
                 try:
+                    # 이벤트 로깅 시작
+                    log_id = await event_logger.log_event_start(self.topic, msg.value)
+                    
+                    # 실제 이벤트 처리
                     await handle_email_event(msg.value)
+                    
+                    # 성공 로그
+                    await event_logger.log_event_complete(log_id)
+                    
                 except Exception as e:
                     logger.error(f"Error handling email event: {str(e)}", exc_info=True)
+                    
+                    # 실패 로그
+                    if log_id:
+                        await event_logger.log_event_failed(log_id, str(e))
                     
         finally:
             await self.consumer.stop()

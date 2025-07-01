@@ -6,6 +6,7 @@ from aiokafka import AIOKafkaConsumer
 import asyncio
 
 from infra.core.config import settings
+from infra.databases.mongo_db import MongoDB
 from schema import DocumentEventType
 from .event_logger import event_logger
 
@@ -19,6 +20,7 @@ class DocumentEventRouter:
         self.consumer = None
         self._running = False
         self.topic = settings.KAFKA_TOPIC_DOCUMENT_UPLOADED
+        self.mongo = MongoDB()  # MongoDB 인스턴스 추가
         
     def register_handler(self, event_type: DocumentEventType, handler: Callable):
         """이벤트 타입별 핸들러 등록"""
@@ -55,9 +57,29 @@ class DocumentEventRouter:
             await self.consumer.stop()
             logger.info("Document Event Router stopped")
     
+    async def _is_already_processed(self, document_id: str) -> bool:
+        """문서가 이미 처리되었는지 확인"""
+        try:
+            # uploads 컬렉션에서 확인 (모든 문서 타입이 여기 저장됨)
+            existing_upload = await self.mongo.db.uploads.find_one({'document_id': document_id})
+            if existing_upload and existing_upload.get('status') == 'completed':
+                return True
+            
+            # pdf_chunks 컬렉션에서도 확인 (PDF/Markdown의 경우)
+            existing_chunk = await self.mongo.db.pdf_chunks.find_one({'document_id': document_id})
+            if existing_chunk:
+                return True
+                
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error checking if document is processed: {str(e)}")
+            return False
+    
     async def _route_event(self, event_data: Dict[str, Any]):
-        """문서 이벤트를 적절한 핸들러로 라우팅 - 로깅 추가"""
+        """문서 이벤트를 적절한 핸들러로 라우팅 - 로깅 및 중복 체크 추가"""
         event_type_str = event_data.get('event_type')
+        document_id = event_data.get('document_id')
         
         # 이벤트 처리 시작 로그
         log_id = await event_logger.log_event_start(self.topic, event_data)
@@ -66,6 +88,18 @@ class DocumentEventRouter:
             error_msg = f"Event type missing in document event: {event_data}"
             logger.error(error_msg)
             await event_logger.log_event_failed(log_id, error_msg)
+            return
+        
+        if not document_id:
+            error_msg = f"Document ID missing in document event: {event_data}"
+            logger.error(error_msg)
+            await event_logger.log_event_failed(log_id, error_msg)
+            return
+        
+        # 중복 처리 체크
+        if await self._is_already_processed(document_id):
+            logger.info(f"Document {document_id} already processed, skipping")
+            await event_logger.log_event_complete(log_id)  # 이미 처리된 것도 성공으로 기록
             return
         
         try:
@@ -79,7 +113,7 @@ class DocumentEventRouter:
         handler = self.handlers.get(event_type)
         
         if handler:
-            logger.info(f"Routing {event_type.value} event for document: {event_data.get('document_id')}")
+            logger.info(f"Routing {event_type.value} event for document: {document_id}")
             try:
                 await handler(event_data)
                 logger.info(f"Successfully handled {event_type.value} event")
