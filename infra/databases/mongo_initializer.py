@@ -36,14 +36,17 @@ class MongoInitializer(ServiceInitializer):
             
             # 필요한 컬렉션 생성
             collections = [
-                'uploads',           # 업로드 정보
-                'pdf_chunks',        # PDF 청크
-                'processing_logs',   # 처리 로그
-                'qdrant_failures',   # Qdrant 실패 로그
-                'email_documents',   # 이메일 문서
-                'email_embeddings',  # 이메일 임베딩
-                'email_attachments', # 이메일 첨부파일
-                'event_logs'         # 이벤트 처리 로그 (새로 추가)
+                'uploads',                    # 업로드 정보
+                'pdf_chunks',                 # PDF 청크
+                'processing_logs',            # 처리 로그
+                'qdrant_failures',            # Qdrant 실패 로그
+                'email_documents',            # 이메일 문서
+                'email_embeddings',           # 이메일 임베딩
+                'email_attachments',          # 이메일 첨부파일
+                'event_logs',                 # 이벤트 처리 로그
+                'email_event_logs',           # 이메일 이벤트 로그 (새로 추가)
+                'batch_logs',                 # 배치 처리 로그 (새로 추가)
+                'email_processing_details'    # 이메일 처리 상세 로그 (새로 추가)
             ]
             existing = await db.list_collection_names()
             
@@ -80,11 +83,33 @@ class MongoInitializer(ServiceInitializer):
             await db.email_attachments.create_index('name')
             await db.email_attachments.create_index('is_downloaded')
             
-            # 이벤트 로그 인덱스 (새로 추가 - 간단한 버전)
+            # 이벤트 로그 인덱스
             await db.event_logs.create_index('status')
             await db.event_logs.create_index('started_at')
             await db.event_logs.create_index('event_type')
             await db.event_logs.create_index('document_id')
+            
+            # 이메일 이벤트 로그 인덱스 (새로 추가)
+            await db.email_event_logs.create_index('event_id')
+            await db.email_event_logs.create_index('account_id')
+            await db.email_event_logs.create_index('status')
+            await db.email_event_logs.create_index('started_at')
+            await db.email_event_logs.create_index('batch_mode')
+            await db.email_event_logs.create_index([('started_at', -1), ('status', 1)])
+            
+            # 배치 로그 인덱스 (새로 추가)
+            await db.batch_logs.create_index('batch_id', unique=True)
+            await db.batch_logs.create_index('event_type')
+            await db.batch_logs.create_index('status')
+            await db.batch_logs.create_index('started_at')
+            await db.batch_logs.create_index([('started_at', -1), ('status', 1)])
+            
+            # 이메일 처리 상세 로그 인덱스 (새로 추가)
+            await db.email_processing_details.create_index('document_id')
+            await db.email_processing_details.create_index('email_id')
+            await db.email_processing_details.create_index('status')
+            await db.email_processing_details.create_index('timestamp')
+            await db.email_processing_details.create_index([('email_id', 1), ('timestamp', -1)])
             
             logger.info("MongoDB indexes created")
             

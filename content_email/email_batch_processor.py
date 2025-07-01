@@ -3,6 +3,9 @@ import asyncio
 import logging
 from typing import List, Dict, Any
 from datetime import datetime
+import uuid
+
+from infra.events.event_logger import event_logger
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +16,7 @@ class EmailBatchProcessor:
         self,
         batch_size: int,
         orchestrator,
-        max_wait_time: float = 5.0  # 최대 대기 시간 (초)
+        max_wait_time: float = 5.0
     ):
         self.batch_size = batch_size
         self.orchestrator = orchestrator
@@ -23,8 +26,19 @@ class EmailBatchProcessor:
         self.batch_start_time = None
         self.processing_task = None
         self.lock = asyncio.Lock()
+        self.wait_task = None
         
-        logger.info(f"EmailBatchProcessor initialized with batch_size={batch_size}")
+        # 통계
+        self.stats = {
+            'total_batches_processed': 0,
+            'total_emails_processed': 0,
+            'failed_batches': 0,
+            'average_batch_size': 0
+        }
+        
+        logger.info(f"EmailBatchProcessor initialized")
+        logger.info(f"  - Batch size: {batch_size}")
+        logger.info(f"  - Max wait time: {max_wait_time}s")
     
     async def add_event(self, event_data: Dict[str, Any]):
         """이벤트를 배치에 추가"""
@@ -32,21 +46,31 @@ class EmailBatchProcessor:
             # 첫 이벤트면 타이머 시작
             if not self.current_batch:
                 self.batch_start_time = asyncio.get_event_loop().time()
+                # 타임아웃 태스크 시작
+                if self.wait_task:
+                    self.wait_task.cancel()
+                self.wait_task = asyncio.create_task(self._wait_and_flush())
             
             self.current_batch.append(event_data)
             
-            # 배치가 가득 찼거나 시간이 초과되면 처리
-            should_process = (
-                len(self.current_batch) >= self.batch_size or
-                (self.batch_start_time and 
-                 asyncio.get_event_loop().time() - self.batch_start_time >= self.max_wait_time)
-            )
-            
-            if should_process:
+            # 배치가 가득 찼으면 즉시 처리
+            if len(self.current_batch) >= self.batch_size:
+                logger.info(f"Batch full ({len(self.current_batch)} events), triggering processing")
                 await self._trigger_batch_processing()
     
+    async def _wait_and_flush(self):
+        """타임아웃 후 자동 플러시"""
+        try:
+            await asyncio.sleep(self.max_wait_time)
+            async with self.lock:
+                if self.current_batch:
+                    logger.info(f"Timeout reached ({self.max_wait_time}s), flushing {len(self.current_batch)} events")
+                    await self._trigger_batch_processing()
+        except asyncio.CancelledError:
+            pass
+    
     async def _trigger_batch_processing(self):
-        """배치 처리 트리거"""
+        """배치 처리 트리거 - lock 내부에서 호출됨"""
         if not self.current_batch:
             return
         
@@ -55,6 +79,11 @@ class EmailBatchProcessor:
         self.current_batch = []
         self.batch_start_time = None
         
+        # 타임아웃 태스크 취소
+        if self.wait_task:
+            self.wait_task.cancel()
+            self.wait_task = None
+        
         # 백그라운드에서 처리
         self.processing_task = asyncio.create_task(
             self._process_batch(batch_to_process)
@@ -62,17 +91,29 @@ class EmailBatchProcessor:
     
     async def _process_batch(self, events: List[Dict[str, Any]]):
         """배치 처리"""
-        logger.info(f"Processing batch of {len(events)} events")
+        batch_id = f"batch_{datetime.utcnow().timestamp()}"
+        start_time = asyncio.get_event_loop().time()
+        
+        # 배치 처리 시작 로그
+        batch_log_id = await event_logger.log_batch_start(
+            batch_id=batch_id,
+            event_count=len(events),
+            event_type='email'
+        )
+        
+        logger.info(f"Processing batch {batch_id} with {len(events)} events")
         
         try:
             # 모든 이벤트의 이메일을 하나로 합침
             all_emails = []
             event_map = {}  # email_id -> event_id 매핑
+            log_id_map = {}  # email_id -> log_id 매핑
             
             for event in events:
                 event_id = event.get('event_id')
                 account_id = event.get('account_id')
                 emails = event.get('response_data', {}).get('value', [])
+                log_id = event.get('_log_id')
                 
                 for email in emails:
                     # 이메일에 메타데이터 추가
@@ -80,6 +121,8 @@ class EmailBatchProcessor:
                     email['_account_id'] = account_id
                     all_emails.append(email)
                     event_map[email['id']] = event_id
+                    if log_id:
+                        log_id_map[email['id']] = log_id
             
             logger.info(f"Total emails in batch: {len(all_emails)}")
             
@@ -88,21 +131,61 @@ class EmailBatchProcessor:
             
             # 통합 요청 생성
             batch_request = EmailProcessingRequest(
-                event_id=f"batch_{datetime.utcnow().timestamp()}",
+                event_id=batch_id,
                 account_id="batch_processing",
                 event_data={
                     'response_data': {'value': all_emails},
-                    'event_map': event_map
+                    'event_map': event_map,
+                    'log_id_map': log_id_map
                 }
             )
             
             # 처리
             result = await self.orchestrator.process_email(batch_request)
             
-            logger.info(f"Batch processing completed: {result.email_count} emails")
+            # 통계 업데이트
+            self.stats['total_batches_processed'] += 1
+            self.stats['total_emails_processed'] += result.email_count
+            
+            # 평균 배치 크기 업데이트
+            if self.stats['total_batches_processed'] > 0:
+                self.stats['average_batch_size'] = (
+                    self.stats['total_emails_processed'] / self.stats['total_batches_processed']
+                )
+            
+            # 처리 시간
+            processing_time = asyncio.get_event_loop().time() - start_time
+            
+            # 배치 처리 완료 로그
+            await event_logger.log_batch_complete(
+                batch_log_id=batch_log_id,
+                processed_count=result.email_count,
+                processing_time=processing_time
+            )
+            
+            # 개별 이벤트 로그 업데이트
+            for email_id, log_id in log_id_map.items():
+                if log_id:
+                    await event_logger.log_event_complete(log_id)
+            
+            logger.info(f"Batch processing completed: {result.email_count} emails in {processing_time:.2f}s")
             
         except Exception as e:
-            logger.error(f"Batch processing failed: {str(e)}", exc_info=True)
+            self.stats['failed_batches'] += 1
+            error_msg = f"Batch processing failed: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            
+            # 배치 실패 로그
+            await event_logger.log_batch_failed(
+                batch_log_id=batch_log_id,
+                error=str(e)
+            )
+            
+            # 개별 이벤트 실패 로그
+            for event in events:
+                log_id = event.get('_log_id')
+                if log_id:
+                    await event_logger.log_event_failed(log_id, error_msg)
     
     async def flush(self):
         """남은 이벤트 처리"""
@@ -114,3 +197,11 @@ class EmailBatchProcessor:
         # 모든 처리 완료 대기
         if self.processing_task:
             await self.processing_task
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """현재 통계 반환"""
+        return {
+            **self.stats,
+            'current_batch_size': len(self.current_batch),
+            'is_processing': self.processing_task and not self.processing_task.done()
+        }
